@@ -1,0 +1,167 @@
+/* /private_gpt/ui/assets/style.css - UPGRADED VERSION */
+
+/* --- 1. THEME & COLOR PALETTE --- */
+:root {
+    --font-family-main: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --primary-color: #7E57C2;
+    --primary-color-hover: #673AB7;
+    --danger-color: #E53935;
+    --danger-color-hover: #C62828;
+    
+    /* Light Theme (Unchanged) */
+    --background-color-light: #F7F7F8;
+    --panel-color-light: #FFFFFF;
+    --text-color-light: #212121;
+    --text-secondary-light: #616161;
+    --border-color-light: #E0E0E0;
+    --user-message-bg-light: #FFFFFF;
+    --bot-message-bg-light: #F0F4F9;
+
+    /* Dark Theme (NEW Lighter Colors) */
+    --background-color-dark: #212529; /* Lighter Charcoal */
+    --panel-color-dark: #282D33;     /* Slightly Lighter Panel */
+    --text-color-dark: #E9ECEF;       /* Brighter Text */
+    --text-secondary-dark: #ADB5BD;   /* Lighter Secondary Text */
+    --border-color-dark: #495057;     /* Softer Border */
+    --user-message-bg-dark: #343A40;  /* Lighter User Message */
+    --bot-message-bg-dark: #282D33;   /* Panel color for Bot Message */
+}
+/* ... (The rest of the CSS from the previous step remains the same) ... */
+/* ... (body, .dark body, .gradio-container, buttons, etc.) ... */
+
+
+/* --- NEW & ENHANCED STYLES --- */
+
+/* Chat Column Header */
+.chat-header {
+    text-align: center;
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color-light);
+    margin-bottom: 1rem;
+}
+.dark .chat-header {
+    border-bottom: 1px solid var(--border-color-dark);
+}
+.chat-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    margin: 0;
+}
+.dark .chat-header h2 {
+    color: var(--text-color-dark);
+}
+
+/* Enhanced Chat Bubbles */
+#chatbot .message-bubble {
+    border: 1px solid var(--border-color-light) !important;
+}
+.dark #chatbot .message-bubble {
+    border: 1px solid var(--border-color-dark) !important;
+}
+
+#chatbot .message-bubble.user {
+    background: var(--user-message-bg-light) !important;
+}
+.dark #chatbot .message-bubble.user {
+    background: var(--user-message-bg-dark) !important;
+}
+
+#chatbot .message-bubble.bot {
+    background: var(--bot-message-bg-light) !important;
+}
+.dark #chatbot .message-bubble.bot {
+    background: var(--bot-message-bg-dark) !important;
+}
+
+/* Avatar images inside the bubbles */
+#chatbot .avatar-image {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Chat Input Area */
+.gradio-container .form {
+    border-top: 1px solid var(--border-color-light) !important;
+    padding-top: 1rem !important;
+}
+.dark .gradio-container .form {
+    border-top: 1px solid var(--border-color-dark) !important;
+}
+
+/* Sources Container Styling */
+.sources-container {
+    background-color: rgba(126, 87, 194, 0.05); /* Faint purple background */
+    border: 1px solid rgba(126, 87, 194, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary-light);
+}
+.dark .sources-container {
+    background-color: rgba(126, 87, 194, 0.1);
+    border: 1px solid rgba(126, 87, 194, 0.3);
+    color: var(--text-secondary-dark);
+}
+.sources-container hr { display: none; } /* Hide the old <hr> tags */
+
+/* --- PASTE ALL YOUR OTHER CSS FROM THE PREVIOUS STEP HERE --- */
+/* (For body, .gradio-container, buttons, file list, logo, footer, etc.) */
+
+
+/* Add these new styles to the end of your style.css file */
+
+/* --- STYLING FOR COLLAPSIBLE ACCORDIONS --- */
+.gradio-container .gr-accordion {
+    border-radius: 12px !important;
+    border: 1px solid var(--border-color-light) !important;
+    background-color: var(--background-color-light);
+    box-shadow: none !important;
+}
+.dark .gradio-container .gr-accordion {
+    border: 1px solid var(--border-color-dark) !important;
+    background-color: var(--background-color-dark);
+}
+.gradio-container .gr-accordion > .label-wrap {
+    background-color: transparent !important;
+    padding: 12px !important;
+}
+
+
+/* --- STYLING FOR CODE BLOCKS IN CHAT --- */
+#chatbot pre {
+    background-color: #eef2f6;
+    border: 1px solid #d1dce5;
+    border-radius: 8px;
+    padding: 1rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: 'Fira Code', 'Courier New', monospace;
+}
+.dark #chatbot pre {
+    background-color: #1a1b26; /* A nice dark blue for code */
+    border: 1px solid #363b5f;
+}
+
+#chatbot pre code {
+    background-color: transparent !important;
+    color: #2d3748;
+    padding: 0;
+}
+.dark #chatbot pre code {
+    color: #c0c5e0;
+}
+
+/* Style the copy button on code blocks */
+#chatbot .copy-button {
+    background-color: #d1dce5 !important;
+    color: #64748b !important;
+    border-radius: 6px !important;
+}
+.dark #chatbot .copy-button {
+    background-color: #363b5f !important;
+    color: #c0c5e0 !important;
+}
