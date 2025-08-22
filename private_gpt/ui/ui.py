@@ -108,8 +108,10 @@ class PrivateGptUi:
                 sources_content += sources_text
                 sources_content += "</div>"
 
-                # Yield the sources as a new, separate message
-                yield {"role": "assistant", "content": sources_content}
+                full_response["content"] += sources_content
+    
+                # Yield the final, combined message
+                yield full_response
 
         # This is the main logic for the _chat method
         def build_history() -> list[ChatMessage]:

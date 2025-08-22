@@ -21,6 +21,11 @@ from private_gpt.server.health.health_router import health_router
 from private_gpt.server.ingest.ingest_router import ingest_router
 from private_gpt.server.recipes.summarize.summarize_router import summarize_router
 from private_gpt.settings.settings import Settings
+from private_gpt.server.chat.chat_service import ChatService
+from llama_index.core.llms import ChatMessage
+from fastapi import Request, Form
+from fastapi.responses import StreamingResponse
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +50,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         # These paths are required for the login page and the Gradio UI to function correctly.
         allowed_paths = [
             "/login",          # The login page itself
+            "/custom",
             "/static",         # Static assets for the login page
             "/docs",           # API documentation
             "/openapi.json",   # API schema
@@ -74,6 +80,40 @@ def create_app(root_injector: Injector) -> FastAPI:
     app.add_middleware(AuthenticationMiddleware)
     app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY", "a_very_secret_key"))
 
+###############################################################################################
+# Custom HTML
+###############################################################################################
+    
+    # @app.get("/custom", response_class=HTMLResponse, tags=["UI"])
+    # async def get_custom_chat(request: Request):
+    #     return templates.TemplateResponse("custom.html", {"request": request})
+    
+    # @app.post("/custom", tags=["UI"])
+    # async def chat_stream_endpoint(request: Request):
+    #     injector = request.state.injector
+    #     chat_service = injector.get(ChatService)
+    #     body = await request.json()
+    #     messages = [ChatMessage(**msg) for msg in body["messages"]]
+
+    #     # This calls the same chat service logic as before
+    #     completion_gen = chat_service.stream_chat(messages=messages, use_context=True)
+
+    #     async def stream_generator():
+    #         for chunk in completion_gen.response:
+    #             yield chunk.delta or ""
+
+    #     return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+
+
+
+
+
+###############################################################################################
+# login
+###############################################################################################
+
     @app.get("/login", response_class=HTMLResponse, tags=["UI"])
     async def get_login_page(request: Request):
         return templates.TemplateResponse("login.html", {"request": request})
@@ -89,7 +129,7 @@ def create_app(root_injector: Injector) -> FastAPI:
                 {"request": request, "error": "Invalid username or password"},
                 status_code=401,
             )
-            
+################################################################################################
     app.include_router(completions_router)
     app.include_router(chat_router)
     app.include_router(chunks_router)
