@@ -13,7 +13,7 @@ from pydantic import BaseModel
 import time
 from collections.abc import Iterable
 from enum import Enum
-
+from datetime import datetime
 from private_gpt.constants import PROJECT_ROOT_PATH
 from private_gpt.di import global_injector
 from private_gpt.open_ai.extensions.context_filter import ContextFilter
@@ -81,6 +81,8 @@ class PrivateGptUi:
 
     def _chat(self, message: str, history: list[dict[str, str]], mode: Modes, *_: Any) -> Any:
         # The history format is now a list of dictionaries, e.g., [{"role": "user", "content": "Hello"}]
+        current_day = datetime.now().day
+        processed_message = message.lower().replace("today's", f"at Day {current_day}").replace("today", f"at Day {current_day}")
         def yield_deltas(completion_gen: CompletionGen) -> Iterable[Any]:
             # This inner function streams the main response
             full_response = {"role": "assistant", "content": ""}
@@ -118,7 +120,7 @@ class PrivateGptUi:
             # UPDATED: This function is now much simpler
             return [ChatMessage(**message) for message in history]
 
-        new_message = ChatMessage(content=message, role=MessageRole.USER)
+        new_message = ChatMessage(content=processed_message, role=MessageRole.USER)
         all_messages = [*build_history(), new_message]
 
         if self._system_prompt:
@@ -284,9 +286,8 @@ class PrivateGptUi:
         return self._ui_block
 
     def _build_ui_blocks(self) -> gr.Blocks:
-        logger.debug("Creating the UI blocks")
+        logger.debug("Creating the new, redesigned UI blocks")
         avatar_user = THIS_DIRECTORY_RELATIVE / "assets/avatar-user.png"
-
         def get_model_label() -> str | None:
             config_settings = settings()
             if config_settings is None: raise ValueError("Settings are not configured.")
@@ -300,80 +301,133 @@ class PrivateGptUi:
             if llm_mode not in model_mapping: return None
             return model_mapping[llm_mode]
 
+        css_path = THIS_DIRECTORY_RELATIVE / "assets" / "style.css"
+
         with gr.Blocks(
-            title=UI_TAB_TITLE,
-            theme=gr.themes.Default(primary_hue="slate", secondary_hue="purple"),
-            css="./assets/style.css",
+            title="NEC GPT",
+            theme=gr.themes.Default(
+                primary_hue="purple", 
+                secondary_hue="purple", 
+                neutral_hue="slate",
+                radius_size=gr.themes.sizes.radius_lg,
+            ),
+            css=str(css_path),
         ) as blocks:
-            with gr.Row():
-                gr.HTML(
-                        f"""
-                        <div class="logo-container">
-                            <img src="{logo_svg}" alt="NEC GPT Logo" width="100" height="100">
-                            <h1 class="fancy-header-text">NEC GPT</h1>
-                        </div>
-                        """
-                    )
-
-            with gr.Row(equal_height=False):
-                with gr.Column(scale=3, elem_classes=["glass-panel", "sidebar"]):
-                    theme_toggle_btn = gr.Button("🌓 Switch Theme", size="sm", elem_id="theme-toggle-btn")
-                    gr.Markdown("### File Management")
-                    upload_button = gr.components.UploadButton("📤 Upload File(s)", type="filepath", file_count="multiple", size="sm")
-                    ingested_dataset = gr.List(self._list_ingested_files, headers=["File name"], label="Ingested Files", interactive=False, render=False)
-                    ingested_dataset.render()
-                    selected_text = gr.components.Textbox("All files", label="Selected File", max_lines=1, interactive=False)
-                    with gr.Row():
-                        deselect_file_button = gr.components.Button("✖️ De-select", size="sm", interactive=False)
-                        delete_file_button = gr.components.Button("🗑️ Delete", size="sm", visible=settings().ui.delete_file_button_enabled, interactive=False)
-                        delete_files_button = gr.components.Button("⚠️ Delete ALL", size="sm", visible=settings().ui.delete_all_files_button_enabled)
-                    gr.Markdown("### Chat Settings")
-                    mode = gr.Radio([mode.value for mode in MODES], label="Mode", value=self._default_mode)
-                    system_prompt_input = gr.Textbox(placeholder=self._system_prompt, label="System Prompt", lines=2, interactive=True, render=False)
-                    clear_chat_button = gr.Button("✨ Clear Chat", variant="secondary")
-                    upload_button.upload(self._upload_file, inputs=upload_button, outputs=ingested_dataset)
-                    ingested_dataset.change(self._list_ingested_files, outputs=ingested_dataset)
-                    deselect_file_button.click(self._deselect_selected_file, outputs=[delete_file_button, deselect_file_button, selected_text])
-                    ingested_dataset.select(fn=self._selected_a_file, outputs=[delete_file_button, deselect_file_button, selected_text])
-                    delete_file_button.click(self._delete_selected_file, outputs=[ingested_dataset, delete_file_button, deselect_file_button, selected_text])
-                    delete_files_button.click(self._delete_all_files, outputs=[ingested_dataset, delete_file_button, deselect_file_button, selected_text])
-                    mode.change(self._set_current_mode, inputs=mode, outputs=[system_prompt_input])
-                    system_prompt_input.blur(self._set_system_prompt, inputs=system_prompt_input)
-
-                with gr.Column(scale=7, elem_id="col"):
-                    gr.HTML("""<div class="chat-header"><h2>Chat</h2></div>""")
-                    model_label = get_model_label()
-                    label_text = f"LLM: {settings().llm.mode}"
-                    if model_label is not None: label_text += f" | Model: {model_label}"
-                    # THE FIX IS HERE: wrapping avatar paths with str()
-                    chatbot = gr.Chatbot(
-                        label=label_text, 
-                        show_copy_button=True,
-                        type="messages",
-                        elem_id="chatbot", 
-                        render=False, 
-                        avatar_images=(str(avatar_user), str(AVATAR_BOT)) # See problem 2
-                    )
-                    _ = gr.ChatInterface(
-                        self._chat,
-                        chatbot=chatbot,
-                        type="messages",
-                        additional_inputs=[mode, upload_button, system_prompt_input]
-                    )
-
-            def clear_chat() -> None: return None
-            clear_chat_button.click(fn=clear_chat, outputs=chatbot)
             
+            # Main layout structure
+            with gr.Row(elem_id="main-container"):
+                
+                # --- SIDEBAR ---
+                with gr.Column(scale=3, elem_classes=["glass-panel", "sidebar"]):
+                    # Header section with Logo and Theme Toggle
+                    with gr.Row(elem_id="sidebar-header"):
+                        gr.HTML(
+                            f"""
+                            <div class="logo-container">
+                                <img src="{logo_svg}" alt="NEC GPT Logo">
+                                <h1 class="fancy-header-text">NEC GPT</h1>
+                            </div>
+                            """
+                        )
+                        theme_toggle_btn = gr.Button("🌓", size="sm", elem_id="theme-toggle-btn", elem_classes=["sidebar-icon-button"])
+
+                    # Collapsible File Management Section
+                    with gr.Accordion("📁 File Management", open=True):
+                        upload_button = gr.UploadButton("📤 Upload File(s)", type="filepath", file_count="multiple", size="sm")
+                        ingested_dataset = gr.List(self._list_ingested_files, label="Ingested Files", interactive=False, render=True)
+                        selected_text = gr.Textbox("All files", label="Selected File", max_lines=1, interactive=False)
+                        
+                        # Action buttons for file management
+                        with gr.Group():
+                            gr.Markdown("#### File Actions")
+                            with gr.Row():
+                                deselect_file_button = gr.components.Button("✖️ De-select", size="sm", interactive=False)
+                                delete_file_button = gr.components.Button("🗑️ Delete", size="sm", visible=settings().ui.delete_file_button_enabled, interactive=False)
+                                # ENHANCEMENT: Use "stop" variant for a visual warning on a destructive action
+                                delete_files_button = gr.components.Button("⚠️ Delete ALL", size="sm", visible=settings().ui.delete_all_files_button_enabled, variant="stop") 
+
+
+                    # Collapsible Chat Settings Section
+                    with gr.Accordion("⚙️ Chat Settings", open=False):
+                        mode = gr.Radio(MODES, label="Mode", value=self._default_mode)
+                        mode_explanation = gr.Markdown(self._get_default_mode_explanation(self._default_mode))
+                        system_prompt_input = gr.Textbox(
+                            self._system_prompt, 
+                            label="System Prompt", 
+                            lines=4, 
+                            interactive=True,
+                            visible=(self._default_mode == "Query")
+                        )
+
+                    mode.change(
+                        lambda mode: (
+                            self._get_default_mode_explanation(mode), 
+                            gr.update(visible=(mode == "Query"))
+                        ),
+                        inputs=mode,
+                        outputs=[mode_explanation, system_prompt_input]
+                    )
+
+
+                # --- CHAT AREA ---
+                with gr.Column(scale=7, elem_id="col"):
+                    # Chat header and chatbot component
+                    with gr.Group():
+                        chatbot = gr.Chatbot(
+                            label=get_model_label(),
+                            show_copy_button=True,
+                            type="messages",
+                            elem_id="chatbot",
+                            render=False,
+                            # FIX: Explicitly convert Path objects to strings for Gradio
+                            avatar_images=(str(avatar_user), str(AVATAR_BOT)),
+                            bubble_full_width=False
+                        )
+                        # Use ChatInterface but place clear button in sidebar
+                        chat_interface = gr.ChatInterface(
+                            self._chat,
+                            chatbot=chatbot,
+                            # Pass the selected_text textbox as input, not the upload_button
+                            additional_inputs=[mode, selected_text, system_prompt_input],
+                            type="messages",
+                            # We will create our own clear button
+                            clear_btn=None, 
+                        )
+                    
+                    # Add clear chat button to the sidebar settings
+                    with gr.Accordion("⚙️ Chat Settings"):
+                        clear_chat_button = gr.Button("✨ Clear Chat", variant="secondary", size="sm")
+
+
+            # --- EVENT HANDLERS ---
+            # File management events
+            upload_button.upload(self._upload_file, inputs=upload_button, outputs=ingested_dataset)
+            ingested_dataset.select(self._selected_a_file, outputs=[delete_file_button, deselect_file_button, selected_text])
+            deselect_file_button.click(self._deselect_selected_file, outputs=[delete_file_button, deselect_file_button, selected_text])
+            delete_file_button.click(self._delete_selected_file, outputs=[ingested_dataset, delete_file_button, deselect_file_button, selected_text])
+            delete_files_button.click(self._delete_all_files, outputs=[ingested_dataset, delete_file_button, deselect_file_button, selected_text])
+
+            # Chat settings events
+            mode.change(self._set_current_mode, inputs=mode, outputs=[system_prompt_input])
+            system_prompt_input.blur(self._set_system_prompt, inputs=system_prompt_input)
+            clear_chat_button.click(lambda: None, None, chatbot, queue=False)
+
+            # Theme toggle event
             theme_toggle_btn.click(None, None, None, js="""
-                function() {
+                () => {
+                    const body = document.body;
+                    body.classList.toggle('dark');
                     const url = new URL(window.location);
-                    const currentTheme = url.searchParams.get('__theme') || 'dark';
-                    if (currentTheme === 'dark') { url.searchParams.set('__theme', 'light'); } 
-                    else { url.searchParams.set('__theme', 'dark'); }
-                    window.location.href = url.toString();
+                    // In a real app, you might want to save this preference
+                    if (body.classList.contains('dark')) {
+                        url.searchParams.set('__theme', 'dark');
+                    } else {
+                        url.searchParams.set('__theme', 'light');
+                    }
+                    window.history.pushState({}, '', url);
                 }
-            """)
-            return blocks
+                """)
+        return blocks
         
     def mount_in_app(self, app: FastAPI, path: str) -> None:
         blocks = self.get_ui_blocks()

@@ -30,8 +30,8 @@ from fastapi.responses import StreamingResponse
 logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory=str(PROJECT_ROOT_PATH / "templates"))
-UI_USERNAME = os.getenv("UI_USERNAME", "admin")
-UI_PASSWORD = os.getenv("UI_PASSWORD", "admin")
+UI_USERNAME = os.getenv("UI_USERNAME")
+UI_PASSWORD = os.getenv("UI_PASSWORD")
 
 # class AuthenticationMiddleware(BaseHTTPMiddleware):
 #     async def dispatch(self, request: Request, call_next: Callable) -> Response:
