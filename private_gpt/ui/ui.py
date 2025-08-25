@@ -232,9 +232,11 @@ class PrivateGptUi:
                 self._ingest_service.delete(doc_id)
 
         self._ingest_service.bulk_ingest([(str(path.name), path) for path in paths])
+        return self._list_ingested_files()
 
     def _delete_all_files(self) -> Any:
-        ingested_files = self._ingest_service.list_ingested()
+        # ingested_files = self._ingest_service.list_ingested()
+        ingested_files = list(self._ingest_service.list_ingested())
         logger.debug("Deleting count=%s files", len(ingested_files))
         for ingested_document in ingested_files:
             self._ingest_service.delete(ingested_document.doc_id)
