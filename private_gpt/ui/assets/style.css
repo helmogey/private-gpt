@@ -5,6 +5,20 @@
 --- Features: Light/Dark Mode, Glassmorphism, Custom Chat Bubbles, Modern Component Styling.
 --- */
 
+/* --- 0. ROOT & GRADIO CONTAINER FIXES --- */
+html, body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent scrollbars on the body */
+}
+
+.gradio-container, gradio-app {
+    height: 100vh !important;
+}
+
+
 /* --- 1. FONT IMPORT & ROOT VARIABLES --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -16,9 +30,9 @@
     --color-primary-light: #7C3AED; /* Vibrant Purple */
     --color-secondary-light: #F3E8FF; /* Light Purple */
     --color-accent-light: #A78BFA; /* Lighter Purple */
-    --color-background-light: #F9FAFB; /* Very Light Gray */
+    --color-background-light: #E5E7EB; /* EDITED: Darker Gray Background */
     --color-panel-light: #FFFFFF;
-    --color-border-light: #E5E7EB;
+    --color-border-light: #D1D5DB;
     --color-text-primary-light: #1F2937;
     --color-text-secondary-light: #6B7280;
     --color-text-accent-light: #6D28D9;
@@ -89,9 +103,13 @@ body:not(.dark) {
 
 /* --- 2. LAYOUT & SIDEBAR --- */
 #main-container {
-    gap: 24px;
+    gap: 16px;
     padding: 16px;
     background-color: transparent;
+    height: 100vh;
+    box-sizing: border-box;
+    max-width: 1600px; /* Optional: constrain max width for very large screens */
+    margin: 0 auto; /* Center the container */
 }
 
 /* Glassmorphism Sidebar */
@@ -103,7 +121,7 @@ body:not(.dark) {
     border-radius: var(--radius-lg);
     padding: 20px;
     box-shadow: var(--shadow-md);
-    height: calc(100vh - 32px); /* Full height minus padding */
+    height: 100%;
     overflow-y: auto;
 }
 
@@ -146,14 +164,23 @@ body:not(.dark) {
 
 /* --- 3. CHAT AREA --- */
 #col {
-    /* EDITED: Changed background and removed panel-like styles */
     background-color: var(--color-background);
     border-radius: var(--radius-lg);
     box-shadow: none;
     border: none;
-    height: calc(100vh - 32px); /* Full height */
+    height: 100%;
     display: flex;
     flex-direction: column;
+}
+
+/* Make the ChatInterface component itself grow to fill the column */
+.gradio-chatinterface {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: transparent !important; /* EDITED: Ensure transparent background */
+    border: none !important; /* EDITED: Remove any default border */
+    box-shadow: none !important; /* EDITED: Remove any default shadow */
 }
 
 /* Chatbot styling */
@@ -162,7 +189,8 @@ body:not(.dark) {
     background-color: transparent;
     box-shadow: none !important;
     border: none !important;
-    height: 100%;
+    overflow-y: auto; /* Add scroll to the chatbot area itself */
+    min-height: 0; /* A flexbox fix to ensure proper shrinking */
 }
 
 #chatbot .message-bubble {

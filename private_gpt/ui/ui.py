@@ -371,32 +371,30 @@ class PrivateGptUi:
                 # --- CHAT AREA ---
                 with gr.Column(scale=7, elem_id="col"):
                     # Chatbot component
-                    with gr.Group():
-                        chatbot = gr.Chatbot(
-                            label=get_model_label(),
-                            show_copy_button=True,
-                            elem_id="chatbot",
-                            type="messages",
-                            render=False, # Will be rendered by ChatInterface
-                            avatar_images=(avatar_user, avatar_bot_str),
-                            bubble_full_width=False,
-                        )
+                    chatbot = gr.Chatbot(
+                        label=get_model_label(),
+                        show_copy_button=True,
+                        elem_id="chatbot",
+                        type="messages",
+                        render=False, # Will be rendered by ChatInterface
+                        avatar_images=(avatar_user, avatar_bot_str),
+                        bubble_full_width=False,)
                         
-                        # Using ChatInterface for a streamlined experience
-                        chat_interface = gr.ChatInterface(
-                            self._chat,
-                            chatbot=chatbot,
-                            additional_inputs=[mode, selected_text, system_prompt_input],
-                            # We created our own clear button in the sidebar
-                            clear_btn=None,
-                            type="messages",
-                            theme="default" # Use our custom CSS
+                    # Using ChatInterface for a streamlined experience
+                    chat_interface = gr.ChatInterface(
+                        self._chat,
+                        chatbot=chatbot,
+                        additional_inputs=[mode, selected_text, system_prompt_input],
+                        # We created our own clear button in the sidebar
+                        clear_btn="✨ Clear Chat",
+                        type="messages",
+                        theme="default" # Use our custom CSS
                         )
 
                     
-                    # Add clear chat button to the sidebar settings
-                    with gr.Accordion("⚙️ Chat Settings"):
-                        clear_chat_button = gr.Button("✨ Clear Chat", variant="secondary", size="sm")
+                    # # Add clear chat button to the sidebar settings
+                    # with gr.Accordion("⚙️ Chat Settings"):
+                    #     clear_chat_button = gr.Button("✨ Clear Chat", variant="secondary", size="sm")
 
 
             # --- EVENT HANDLERS ---
@@ -410,7 +408,7 @@ class PrivateGptUi:
             # Chat settings events
             mode.change(self._set_current_mode, inputs=mode, outputs=[system_prompt_input])
             system_prompt_input.blur(self._set_system_prompt, inputs=system_prompt_input)
-            clear_chat_button.click(lambda: None, None, chatbot, queue=False)
+            # clear_chat_button.click(lambda: None, None, chatbot, queue=False)
 
             # Theme toggle event
             theme_toggle_btn.click(None, None, None, js="""
