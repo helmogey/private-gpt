@@ -235,6 +235,8 @@ class PrivateGptUi:
 
         self._ingest_service.bulk_ingest([(str(path.name), path) for path in paths])
 
+        return self._list_ingested_files()
+
     def _delete_all_files(self) -> Any:
         ingested_files = self._ingest_service.list_ingested()
         logger.debug("Deleting count=%s files", len(ingested_files))
@@ -338,12 +340,13 @@ class PrivateGptUi:
                         selected_text = gr.Textbox("All files", label="Selected File", max_lines=1, interactive=False)
                         
                         # Action buttons for file management
-
-                        with gr.Row():
-                            deselect_file_button = gr.components.Button("✖️ De-select", size="sm", interactive=False)
-                            delete_file_button = gr.components.Button("🗑️ Delete", size="sm", visible=settings().ui.delete_file_button_enabled, interactive=False)
-                            # ENHANCEMENT: Use "stop" variant for a visual warning on a destructive action
-                            delete_files_button = gr.components.Button("⚠️ Delete ALL", size="sm", visible=settings().ui.delete_all_files_button_enabled, variant="stop") 
+                        with gr.Group():
+                            gr.Markdown("#### File Actions")
+                            with gr.Row():
+                                deselect_file_button = gr.components.Button("✖️ De-select", size="sm", interactive=False)
+                                delete_file_button = gr.components.Button("🗑️ Delete", size="sm", visible=settings().ui.delete_file_button_enabled, interactive=False)
+                                # ENHANCEMENT: Use "stop" variant for a visual warning on a destructive action
+                                delete_files_button = gr.components.Button("⚠️ Delete ALL", size="sm", visible=settings().ui.delete_all_files_button_enabled, variant="stop") 
 
 
                     # Collapsible Chat Settings Section
