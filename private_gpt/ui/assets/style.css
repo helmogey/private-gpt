@@ -1,258 +1,282 @@
-/* --- 
-Modern Chatbot UI Stylesheet
+/* ---
+--- MODERN CHATBOT UI STYLES
+--- Author: Gemini
+--- Description: A complete stylesheet for a polished, lovable, and fancy Gradio chatbot UI.
+--- Features: Light/Dark Mode, Glassmorphism, Custom Chat Bubbles, Modern Component Styling.
 --- */
 
-/* 1. FONT IMPORT & ROOT VARIABLES
-/* ---------------------------------- */
+/* --- 1. FONT IMPORT & ROOT VARIABLES --- */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
+    /* Base Font */
     --font-family-main: 'Inter', sans-serif;
-    
-    /* Light Mode Palette */
-    --light-primary: #6B46C1; /* A friendly purple */
-    --light-secondary: #F0E6FF;
-    --light-background-primary: #F7FAFC;
-    --light-background-secondary: #FFFFFF;
-    --light-text-primary: #1A202C;
-    --light-text-secondary: #4A5568;
-    --light-border-color: #E2E8F0;
-    --light-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --light-glass-bg: rgba(255, 255, 255, 0.6);
 
-    /* Dark Mode Palette */
-    --dark-primary: #9F7AEA; /* A softer purple for dark mode */
-    --dark-secondary: #2D3748;
-    --dark-background-primary: #1A202C;
-    --dark-background-secondary: #2D3748;
-    --dark-text-primary: #F7FAFC;
-    --dark-text-secondary: #A0AEC0;
-    --dark-border-color: #4A5568;
-    --dark-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    --dark-glass-bg: rgba(26, 32, 44, 0.6);
+    /* Light Theme Palette */
+    --color-primary-light: #7C3AED; /* Vibrant Purple */
+    --color-secondary-light: #F3E8FF; /* Light Purple */
+    --color-accent-light: #A78BFA; /* Lighter Purple */
+    --color-background-light: #F9FAFB; /* Very Light Gray */
+    --color-panel-light: #FFFFFF;
+    --color-border-light: #E5E7EB;
+    --color-text-primary-light: #1F2937;
+    --color-text-secondary-light: #6B7280;
+    --color-text-accent-light: #6D28D9;
+    --color-shadow-light: rgba(100, 100, 111, 0.1);
+    --color-glass-bg-light: rgba(255, 255, 255, 0.6);
+
+    /* Dark Theme Palette */
+    --color-primary-dark: #8B5CF6; /* Vibrant Purple */
+    --color-secondary-dark: #3730A3; /* Dark Indigo */
+    --color-accent-dark: #A78BFA; /* Lighter Purple */
+    --color-background-dark: #111827; /* Very Dark Gray */
+    --color-panel-dark: #1F2937;
+    --color-border-dark: #374151;
+    --color-text-primary-dark: #F9FAFB;
+    --color-text-secondary-dark: #9CA3AF;
+    --color-text-accent-dark: #C4B5FD;
+    --color-shadow-dark: rgba(0, 0, 0, 0.2);
+    --color-glass-bg-dark: rgba(31, 41, 55, 0.5);
+
+    /* Sizing & Radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 2px 4px var(--shadow-light);
+    --shadow-md: 0 4px 8px var(--shadow-light);
 }
 
-/* 2. THEME & GLOBAL STYLES
-/* ---------------------------------- */
+/* Apply theme variables */
 body {
     font-family: var(--font-family-main);
-    background-color: var(--light-background-primary);
-    color: var(--light-text-primary);
+    background-color: var(--color-background-light);
+    color: var(--color-text-primary-light);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 body.dark {
-    background-color: var(--dark-background-primary);
-    color: var(--dark-text-primary);
+    --color-primary: var(--color-primary-dark);
+    --color-secondary: var(--color-secondary-dark);
+    --color-accent: var(--color-accent-dark);
+    --color-background: var(--color-background-dark);
+    --color-panel: var(--color-panel-dark);
+    --color-border: var(--color-border-dark);
+    --color-text-primary: var(--color-text-primary-dark);
+    --color-text-secondary: var(--color-text-secondary-dark);
+    --color-text-accent: var(--color-text-accent-dark);
+    --shadow-sm: 0 2px 4px var(--shadow-dark);
+    --shadow-md: 0 4px 8px var(--shadow-dark);
+    --color-glass-bg: var(--color-glass-bg-dark);
+    background-color: var(--color-background-dark);
+    color: var(--color-text-primary-dark);
 }
 
-/* General component styling */
-.gradio-container {
+body:not(.dark) {
+    --color-primary: var(--color-primary-light);
+    --color-secondary: var(--color-secondary-light);
+    --color-accent: var(--color-accent-light);
+    --color-background: var(--color-background-light);
+    --color-panel: var(--color-panel-light);
+    --color-border: var(--color-border-light);
+    --color-text-primary: var(--color-text-primary-light);
+    --color-text-secondary: var(--color-text-secondary-light);
+    --color-text-accent: var(--color-text-accent-light);
+    --shadow-sm: 0 2px 4px var(--shadow-light);
+    --shadow-md: 0 4px 8px var(--shadow-light);
+    --color-glass-bg: var(--color-glass-bg-light);
+}
+
+
+/* --- 2. LAYOUT & SIDEBAR --- */
+#main-container {
+    gap: 24px;
+    padding: 16px;
     background-color: transparent;
 }
 
-.gradio-row, .gradio-column {
-    background-color: transparent !important;
-    gap: 1.5rem;
+/* Glassmorphism Sidebar */
+.sidebar.glass-panel {
+    background-color: var(--color-glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-md);
+    height: calc(100vh - 32px); /* Full height minus padding */
+    overflow-y: auto;
 }
 
-/* 3. HEADER & LOGO
-/* ---------------------------------- */
+#sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
 .logo-container {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 1rem 0;
+    gap: 12px;
 }
 
 .logo-container img {
-    width: 50px;
-    height: 50px;
+    height: 40px;
+    width: 40px;
 }
 
 .fancy-header-text {
-    font-size: 2rem;
+    font-size: 24px;
     font-weight: 700;
-    color: var(--light-text-primary);
+    color: var(--color-text-primary);
     margin: 0;
 }
 
-body.dark .fancy-header-text {
-    color: var(--dark-text-primary);
-}
-
-
-/* 4. SIDEBAR & GLASSMORPHISM
-/* ---------------------------------- */
-.sidebar.glass-panel {
-    background-color: var(--light-glass-bg);
-    border: 1px solid var(--light-border-color);
-    border-radius: 1.5rem; /* Softer, larger radius */
-    padding: 1.5rem !important;
-    box-shadow: var(--light-shadow);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
-}
-
-body.dark .sidebar.glass-panel {
-    background-color: var(--dark-glass-bg);
-    border-color: var(--dark-border-color);
-    box-shadow: var(--dark-shadow);
-}
-
-/* 5. CHAT AREA
-/* ---------------------------------- */
-#col {
-    background-color: var(--light-background-secondary);
-    border-radius: 1.5rem;
-    padding: 1rem;
-    box-shadow: var(--light-shadow);
-    transition: all 0.3s ease;
-}
-
-body.dark #col {
-    background-color: var(--dark-background-secondary);
-    box-shadow: var(--dark-shadow);
-}
-
-.chat-header {
-    text-align: center;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--light-border-color);
-    margin-bottom: 1rem;
-}
-
-body.dark .chat-header {
-    border-bottom-color: var(--dark-border-color);
-}
-
-/* 6. CHATBOT BUBBLES
-/* ---------------------------------- */
-#chatbot {
-    background-color: transparent;
+#theme-toggle-btn {
+    background: transparent;
     border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    transition: transform 0.2s ease;
+}
+#theme-toggle-btn:hover {
+    transform: scale(1.1);
+}
+
+/* --- 3. CHAT AREA --- */
+#col {
+    /* EDITED: Changed background and removed panel-like styles */
+    background-color: var(--color-background);
+    border-radius: var(--radius-lg);
     box-shadow: none;
-    height: 65vh; /* Or adjust as needed */
+    border: none;
+    height: calc(100vh - 32px); /* Full height */
+    display: flex;
+    flex-direction: column;
 }
 
-#chatbot .message-row {
-    border-radius: 1rem;
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.75rem;
+/* Chatbot styling */
+#chatbot {
+    flex-grow: 1;
+    background-color: transparent;
+    box-shadow: none !important;
+    border: none !important;
+    height: 100%;
 }
 
-/* Bot messages */
-#chatbot .message-row:not(.user) {
-    background-color: var(--light-background-primary);
-    border: 1px solid var(--light-border-color);
-    color: var(--light-text-primary);
+#chatbot .message-bubble {
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm) !important;
+    border: 1px solid var(--color-border);
+    padding: 12px 16px !important;
+    max-width: 85%;
 }
 
-body.dark #chatbot .message-row:not(.user) {
-    background-color: var(--dark-background-secondary);
-    border-color: var(--dark-border-color);
-    color: var(--dark-text-primary);
+#chatbot .message-bubble.user {
+    background: var(--color-primary) !important;
+    color: white !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg) !important;
+    align-self: flex-end;
 }
 
-/* User messages */
-#chatbot .message-row.user {
-    background: var(--light-primary);
-    color: white;
+#chatbot .message-bubble.bot {
+    background: var(--color-panel) !important;
+    color: var(--color-text-primary) !important;
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 0 !important;
+    align-self: flex-start;
 }
 
-body.dark #chatbot .message-row.user {
-    background: var(--dark-primary);
+/* Source code block styling */
+.sources-container {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--color-border);
 }
 
-#chatbot .message-row .avatar-image {
-    width: 35px;
-    height: 35px;
-    border-radius: 50%;
+/* Chat Interface Input Area */
+.gradio-container .chat-interface-input-container {
+    padding: 16px !important;
+    background-color: var(--color-background) !important;
+    border-top: 1px solid var(--color-border) !important;
 }
 
-/* 7. COMPONENT STYLING
-/* ---------------------------------- */
+.chat-interface-input-container textarea {
+    background-color: var(--color-panel) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-md) !important;
+    color: var(--color-text-primary) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.chat-interface-input-container textarea:focus {
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 0 3px var(--color-secondary) !important;
+}
+
+.chat-interface-input-container button {
+    background-color: var(--color-primary) !important;
+    color: white !important;
+    border-radius: var(--radius-md) !important;
+    transition: background-color 0.2s ease;
+}
+
+.chat-interface-input-container button:hover {
+    background-color: var(--color-accent) !important;
+}
+
+
+/* --- 4. GRADIO COMPONENT STYLING --- */
+
+/* Accordions (for sidebar sections) */
+.gradio-accordion {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 16px;
+}
+.gradio-accordion > .label-wrap {
+    padding: 16px !important;
+}
+.gradio-accordion > .label-wrap span {
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
 
 /* Buttons */
 .gradio-button {
-    border-radius: 0.75rem !important;
-    font-weight: 600 !important;
+    border-radius: var(--radius-md) !important;
+    font-weight: 500 !important;
     transition: all 0.2s ease !important;
-    box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1) !important;
-}
-.gradio-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.15) !important;
 }
 
-/* Icon-only buttons in the sidebar */
-.sidebar-icon-button {
-    min-width: 40px !important; /* Ensure it's square-ish */
-    max-width: 40px !important;
-    padding: 0 !important;
-    font-size: 1.2rem;
+/* Textbox & List */
+.gradio-textbox, .gradio-list {
+    border-radius: var(--radius-md) !important;
+    border: 1px solid var(--color-border) !important;
+    background-color: var(--color-background) !important;
+}
+.gradio-list .row {
+    padding: 10px 12px !important;
+}
+.gradio-list .row:hover {
+    background-color: var(--color-secondary) !important;
 }
 
-/* Textbox & Inputs */
-.gradio-textbox, .gradio-list, .gradio-radio {
-    border-radius: 0.75rem !important;
-    border: 1px solid var(--light-border-color) !important;
-    background-color: var(--light-background-secondary) !important;
-    transition: all 0.3s ease;
+/* Radio Buttons */
+.gradio-radio .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-body.dark .gradio-textbox, 
-body.dark .gradio-list, 
-body.dark .gradio-radio {
-    border-color: var(--dark-border-color) !important;
-    background-color: var(--dark-background-secondary) !important;
-}
-
-/* Accordion Styling */
-.gradio-accordion {
-    border-radius: 1rem !important;
-    border: 1px solid var(--light-border-color) !important;
-    background-color: transparent !important;
-}
-
-body.dark .gradio-accordion {
-    border-color: var(--dark-border-color) !important;
-}
-
-/* 8. RESPONSIVE DESIGN
-/* ---------------------------------- */
+/* --- 5. RESPONSIVE DESIGN --- */
 @media (max-width: 768px) {
-    .gradio-row {
+    #main-container {
         flex-direction: column;
     }
     .sidebar.glass-panel, #col {
-        border-radius: 1rem;
+        height: auto;
+        max-height: 50vh;
     }
-    #chatbot {
-        height: 50vh;
-    }
-}
-
-/* ENHANCEMENT: Style for the new action button group */
-.gradio-group {
-    border: none !important;
-    border-radius: 1rem !important;
-    background-color: rgba(0,0,0,0.02);
-    padding: 0.75rem;
-}
-body.dark .gradio-group {
-    background-color: rgba(255,255,255,0.03);
-}
-
-/* ENHANCEMENT: Hover effect for file list items */
-.gradio-list .item {
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-.gradio-list .item:hover {
-    background-color: var(--light-secondary) !important;
-}
-body.dark .gradio-list .item:hover {
-    background-color: var(--dark-secondary) !important;
 }

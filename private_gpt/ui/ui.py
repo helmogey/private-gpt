@@ -50,9 +50,7 @@ class Source(BaseModel):
             curated_sources.append(source)
         return list(dict.fromkeys(curated_sources).keys())
 
-def get_model_label() -> str | None:
-    # ... (This function remains unchanged)
-    return settings().llamacpp.llm_hf_model_file # Simplified for brevity
+
 
 @singleton
 class PrivateGptUi:
@@ -287,7 +285,8 @@ class PrivateGptUi:
 
     def _build_ui_blocks(self) -> gr.Blocks:
         logger.debug("Creating the new, redesigned UI blocks")
-        avatar_user = THIS_DIRECTORY_RELATIVE / "assets/avatar-user.png"
+        avatar_user = str(THIS_DIRECTORY_RELATIVE / "assets/avatar-user.png")
+        avatar_bot_str = str(AVATAR_BOT)
         def get_model_label() -> str | None:
             config_settings = settings()
             if config_settings is None: raise ValueError("Settings are not configured.")
@@ -371,28 +370,29 @@ class PrivateGptUi:
 
                 # --- CHAT AREA ---
                 with gr.Column(scale=7, elem_id="col"):
-                    # Chat header and chatbot component
+                    # Chatbot component
                     with gr.Group():
                         chatbot = gr.Chatbot(
                             label=get_model_label(),
                             show_copy_button=True,
-                            type="messages",
                             elem_id="chatbot",
-                            render=False,
-                            # FIX: Explicitly convert Path objects to strings for Gradio
-                            avatar_images=(str(avatar_user), str(AVATAR_BOT)),
-                            bubble_full_width=False
+                            type="messages",
+                            render=False, # Will be rendered by ChatInterface
+                            avatar_images=(avatar_user, avatar_bot_str),
+                            bubble_full_width=False,
                         )
-                        # Use ChatInterface but place clear button in sidebar
+                        
+                        # Using ChatInterface for a streamlined experience
                         chat_interface = gr.ChatInterface(
                             self._chat,
                             chatbot=chatbot,
-                            # Pass the selected_text textbox as input, not the upload_button
                             additional_inputs=[mode, selected_text, system_prompt_input],
+                            # We created our own clear button in the sidebar
+                            clear_btn=None,
                             type="messages",
-                            # We will create our own clear button
-                            clear_btn=None, 
+                            theme="default" # Use our custom CSS
                         )
+
                     
                     # Add clear chat button to the sidebar settings
                     with gr.Accordion("⚙️ Chat Settings"):
