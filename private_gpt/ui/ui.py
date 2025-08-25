@@ -391,11 +391,6 @@ class PrivateGptUi:
                         theme="default" # Use our custom CSS
                         )
 
-                    
-                    # # Add clear chat button to the sidebar settings
-                    # with gr.Accordion("⚙️ Chat Settings"):
-                    #     clear_chat_button = gr.Button("✨ Clear Chat", variant="secondary", size="sm")
-
 
             # --- EVENT HANDLERS ---
             # File management events
@@ -408,7 +403,6 @@ class PrivateGptUi:
             # Chat settings events
             mode.change(self._set_current_mode, inputs=mode, outputs=[system_prompt_input])
             system_prompt_input.blur(self._set_system_prompt, inputs=system_prompt_input)
-            # clear_chat_button.click(lambda: None, None, chatbot, queue=False)
 
             # Theme toggle event
             theme_toggle_btn.click(None, None, None, js="""
