@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEC GPT - AI-Powered Document Chat</title>
+    <meta name="description" content="Intelligent chatbot for document analysis and conversation. Upload files and get AI-powered insights with NEC GPT." />
+    <meta name="author" content="NEC GPT" />
+    <meta name="keywords" content="AI chatbot, document analysis, file upload, artificial intelligence, NEC GPT" />
+
+    <meta property="og:title" content="NEC GPT - AI-Powered Document Chat" />
+    <meta property="og:description" content="Intelligent chatbot for document analysis and conversation. Upload files and get AI-powered insights." />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NEC GPT - AI-Powered Document Chat" />
+    <meta name="twitter:description" content="Intelligent chatbot for document analysis and conversation" />
+    
+    <link rel="canonical" href="/" />
+    <!-- Corrected path to include /assets/ -->
+    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar glass-panel">
+            <div id="sidebar-header">
+                <div class="logo-container">
+                    <div class="logo-icon">
+                        <img src="/assets/NEC-Logo.svg" alt="NEC Logo" width="50" height="50">
+                    </div>
+                    <h1 class="fancy-header-text">NEC GPT</h1>
+                </div>
+                <button id="theme-toggle-btn" class="theme-toggle">
+                    <svg class="theme-icon" width="20" height="20" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- File Management Section -->
+            <section class="accordion">
+                <h2 class="accordion-header" onclick="toggleAccordion(this)">
+                    <span>📁 File Management</span>
+                    <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="m7 10 5 5 5-5z"/>
+                    </svg>
+                </h2>
+                <div class="accordion-content expanded">
+                    <div class="upload-zone" id="upload-zone">
+                        <div class="upload-content">
+                            <div class="upload-icon" id="upload-icon">
+                                <svg width="24" height="24" viewBox="0 0 24 24">
+                                    <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                                </svg>
+                            </div>
+                            <p class="upload-text">
+                                <span class="upload-primary">Upload File(s)</span>
+                                <span class="upload-secondary">Click or drag files here</span>
+                            </p>
+                            <div class="upload-progress" id="upload-progress">
+                                <div class="upload-progress-bar" id="upload-progress-bar"></div>
+                            </div>
+                        </div>
+                        <input type="file" id="upload-input" multiple hidden>
+                    </div>
+                    
+                    <div id="upload-status" class="upload-status"></div>
+
+                    <div class="file-section">
+                        <h3>Ingested Files</h3>
+                        <div class="file-list-container">
+                            <ul id="file-list" class="file-list"></ul>
+                        </div>
+                    </div>
+
+                    <div class="file-section">
+                        <h3>Selected File</h3>
+                        <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
+                    </div>
+
+                    <div class="file-actions">
+                        <button id="deselect-btn" class="icon-button" disabled title="Deselect File">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>
+                        </button>
+                        <button id="delete-selected-btn" class="icon-button" disabled title="Delete Selected File">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
+                        </button>
+                        <button id="delete-all-btn" class="icon-button destructive" title="Delete All Files">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2C13.1,2 14,2.9 14,4C14,5.1 13.1,6 12,6C10.9,6 10,5.1 10,4C10,2.9 10.9,2 12,2M21,9V7L15,1H5C3.89,1 3,1.89 3,3V19A2,2 0 0,0 5,21H11V19H5V3H14V8H19V9H21M15.5,12L18.5,9H16.5V4H14.5V9H12.5L15.5,12Z"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat Settings Section -->
+            <section class="accordion">
+                <h2 class="accordion-header" onclick="toggleAccordion(this)">
+                    <span>⚙️ Chat Settings</span>
+                    <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="m7 10 5 5 5-5z"/>
+                    </svg>
+                </h2>
+                <div class="accordion-content">
+                    <div class="mode-selector">
+                        <label><input type="radio" name="mode" value="RAG" checked> RAG Mode</label>
+                        <label><input type="radio" name="mode" value="Search"> Search Mode</label>
+                    </div>
+                </div>
+            </section>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main id="col">
+            <div id="chatbot">
+                <div class="welcome-message" id="welcome-message">
+                    <div class="welcome-icon">
+                        <svg width="48" height="48" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+                            <path fill="currentColor" d="M208.3 53.8a8 8 0 0 1 4.1 11.4l-64 112A8 8 0 0 1 141 180h-26.2a8 8 0 0 1-7.7-5.8l-12.8-35.1-12.8 35.1a8 8 0 0 1-7.7 5.8H48a8 8 0 0 1-7.4-11.4l64-112a8 8 0 0 1 13.4 0l25.8 45L174.2 48a8 8 0 0 1 10.4-4.2l23.7 10Z"/>
+                        </svg>
+                    </div>
+                    <h2>Welcome to NEC GPT</h2>
+                    <p>Start a conversation by typing a message below.</p>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <div class="chat-actions">
+                    <button id="clear-btn" class="chat-action-button" title="Clear Chat">
+                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19.36,2.72L20.78,4.14L15.06,9.85C16.13,11.39 16.28,13.24 15.38,14.44L9.06,8C10.26,7.1 12.11,7.25 13.65,8.32L19.36,2.72M5.93,17.57C3.92,15.56 2.69,13.16 2.24,10.55L10.6,18.9C13.21,19.35 15.61,18.12 17.62,16.11L5.93,17.57Z"/></svg>
+                    </button>
+                </div>
+                <div class="input-wrapper">
+                    <textarea id="chat-input" placeholder="Type your message... (Shift+Enter for new line)" rows="1"></textarea>
+                    <button id="send-btn" title="Send Message">
+                        <svg class="send-icon" width="20" height="20" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M2,21L23,12L2,3V10L17,12L2,14V21Z"/>
+                        </svg>
+                        <div class="loading-spinner" id="loading-spinner"></div>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Corrected path to include /assets/ -->
+    <script src="/assets/script.js"></script>
+</body>
+</html>
