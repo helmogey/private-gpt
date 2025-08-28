@@ -95,6 +95,7 @@ def create_app(root_injector: Injector) -> FastAPI:
     @app.get("/login", response_class=HTMLResponse, tags=["UI"])
     async def get_login_page(request: Request):
         return templates.TemplateResponse("login.html", {"request": request})
+        
 
     @app.post("/login", tags=["UI"])
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -117,12 +118,22 @@ def create_app(root_injector: Injector) -> FastAPI:
                 {"request": request, "error": "Invalid username or password"},
                 status_code=401,
             )
-        
-
+    
     @app.get("/logout", tags=["UI"])
     async def handle_logout(request: Request):
-        request.session.clear()  # Clear the session data
-        return RedirectResponse(url="/login", status_code=303)
+        # Clear the session data on the server side
+        request.session.clear()
+        
+        # Create a redirect response to the login page
+        response = RedirectResponse(url="/login", status_code=303)
+        
+        # Explicitly tell the browser to delete the session cookie.
+        # Specifying the path ensures we are targeting the correct cookie.
+        # Most browsers default to '/', but being explicit can resolve
+        # cross-browser inconsistencies with browsers like Firefox.
+        response.delete_cookie("session", path="/")
+        
+        return response
 
 
     @app.get("/api/session/expiry", tags=["UI"])
