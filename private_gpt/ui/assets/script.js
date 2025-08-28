@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
     const deleteAllBtn = document.getElementById('delete-all-btn');
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    const logoutBtn = document.getElementById('logout-btn');
     const welcomeMessage = document.getElementById('welcome-message');
     const clearBtn = document.getElementById('clear-btn');
     const modeRadios = document.querySelectorAll('input[name="mode"]');
@@ -23,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMode = 'RAG'; // Default mode
     let isUploading = false;
     let isTyping = false;
+    let sessionTimeoutId = null; // To hold the session timer
 
     // --- Utility Functions ---
 
@@ -175,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     messages: chatHistory,
-                    mode: currentMode, // EDITED: Send the current mode
+                    mode: currentMode,
                     context_filter: selectedFile ? { docs_ids: [selectedFile] } : null
                 }),
             });
@@ -337,6 +339,69 @@ document.addEventListener('DOMContentLoaded', () => {
         showStatus('Chat cleared', 'info');
     }
 
+    // --- Role Management ---
+    async function fetchUserRole() {
+        try {
+            const response = await fetch('/api/user/role');
+            if (!response.ok) {
+                throw new Error('Failed to fetch user role.');
+            }
+            const data = await response.json();
+            // Set a data attribute on the body. CSS will use this to hide elements.
+            document.body.dataset.userRole = data.role;
+        } catch (error) {
+            console.error('Error fetching user role:', error);
+            // Default to the most restrictive role if the API call fails
+            document.body.dataset.userRole = '1';
+        }
+    }
+
+    // --- Session Management ---
+    function resetSessionTimeout(maxAgeSeconds) {
+        // Clear any existing timer
+        if (sessionTimeoutId) {
+            clearTimeout(sessionTimeoutId);
+        }
+
+        // Set a new timer if maxAge is valid
+        if (maxAgeSeconds && maxAgeSeconds > 0) {
+            sessionTimeoutId = setTimeout(() => {
+                try {
+                    showStatus('Session expired due to inactivity, logging out...', 'info');
+                    setTimeout(() => {
+                       window.location.href = '/logout';
+                    }, 1500); // Give user a moment to see the message
+                } catch (e) {
+                    console.error("Error showing session expiry message, forcing logout.", e);
+                    window.location.href = '/logout';
+                }
+            }, maxAgeSeconds * 1000);
+        }
+    }
+
+    async function setupSessionTimeout() {
+        try {
+            const response = await fetch('/api/session/expiry');
+            if (!response.ok) {
+                console.log('Could not fetch session expiry. User might be logged out.');
+                return;
+            }
+            const data = await response.json();
+            const maxAgeSeconds = data.max_age;
+
+            // Set the initial timer
+            resetSessionTimeout(maxAgeSeconds);
+
+            // Add event listeners to reset the timer on any user activity
+            ['mousemove', 'keydown', 'click'].forEach(eventName => {
+                document.addEventListener(eventName, () => resetSessionTimeout(maxAgeSeconds));
+            });
+            
+        } catch (error) {
+            console.error('Error setting up session timeout:', error);
+        }
+    }
+
     // --- Event Listeners ---
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
@@ -346,6 +411,9 @@ document.addEventListener('DOMContentLoaded', () => {
     deleteAllBtn.addEventListener('click', deleteAllFiles);
     deleteSelectedBtn.addEventListener('click', deleteSelected);
     clearBtn.addEventListener('click', clearChat);
+    logoutBtn.addEventListener('click', () => {
+        window.location.href = '/logout';
+    });
     modeRadios.forEach(radio => {
         radio.addEventListener('change', (e) => {
             currentMode = e.target.value;
@@ -358,4 +426,6 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshFileList();
     autoResizeTextarea(chatInput);
     chatInput.focus();
+    fetchUserRole();
+    setupSessionTimeout();
 });

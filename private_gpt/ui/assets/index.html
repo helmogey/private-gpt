@@ -30,19 +30,24 @@
             <div id="sidebar-header">
                 <div class="logo-container">
                     <div class="logo-icon">
-                        <img src="/assets/NEC-Logo.svg" alt="NEC Logo" width="50" height="50">
+                        <img src="/assets/NEC-Logo.svg" alt="NEC Logo">
                     </div>
                     <h1 class="fancy-header-text">NEC GPT</h1>
                 </div>
-                <button id="theme-toggle-btn" class="theme-toggle">
-                    <svg class="theme-icon" width="20" height="20" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
-                    </svg>
-                </button>
+                <div>
+                    <button id="theme-toggle-btn" class="theme-toggle" title="Toggle Theme">
+                        <svg class="theme-icon" width="20" height="20" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+                        </svg>
+                    </button>
+                    <button id="logout-btn" class="theme-toggle" title="Logout">
+                        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9Z"/></svg>
+                    </button>
+                </div>
             </div>
 
             <!-- File Management Section -->
-            <section class="accordion">
+            <section class="accordion" id="file-management-section">
                 <h2 class="accordion-header" onclick="toggleAccordion(this)">
                     <span>📁 File Management</span>
                     <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
@@ -97,7 +102,7 @@
             </section>
 
             <!-- Chat Settings Section -->
-            <section class="accordion">
+            <section class="accordion" id="chat-settings-section">
                 <h2 class="accordion-header" onclick="toggleAccordion(this)">
                     <span>⚙️ Chat Settings</span>
                     <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
@@ -118,9 +123,7 @@
             <div id="chatbot">
                 <div class="welcome-message" id="welcome-message">
                     <div class="welcome-icon">
-                        <svg width="48" height="48" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
-                            <path fill="currentColor" d="M208.3 53.8a8 8 0 0 1 4.1 11.4l-64 112A8 8 0 0 1 141 180h-26.2a8 8 0 0 1-7.7-5.8l-12.8-35.1-12.8 35.1a8 8 0 0 1-7.7 5.8H48a8 8 0 0 1-7.4-11.4l64-112a8 8 0 0 1 13.4 0l25.8 45L174.2 48a8 8 0 0 1 10.4-4.2l23.7 10Z"/>
-                        </svg>
+                        <img src="/assets/NEC-Logo.svg" alt="NEC Logo">
                     </div>
                     <h2>Welcome to NEC GPT</h2>
                     <p>Start a conversation by typing a message below.</p>

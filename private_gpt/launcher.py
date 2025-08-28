@@ -4,7 +4,7 @@ import logging
 import os
 from injector import Injector
 from fastapi import Depends, FastAPI, Request, Response, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -25,6 +25,8 @@ from private_gpt.server.chat.chat_service import ChatService
 from llama_index.core.llms import ChatMessage
 from fastapi import Request, Form
 from fastapi.responses import StreamingResponse
+from dotenv import load_dotenv
+load_dotenv()
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +45,7 @@ UI_PASSWORD = os.getenv("UI_PASSWORD")
 #         return await call_next(request)
 
 
-# In launcher.py
+SESSION_MAX_AGE = 60
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -78,36 +80,7 @@ def create_app(root_injector: Injector) -> FastAPI:
     app = FastAPI(dependencies=[Depends(bind_injector_to_request)])
     
     app.add_middleware(AuthenticationMiddleware)
-    app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY", "a_very_secret_key"))
-
-###############################################################################################
-# Custom HTML
-###############################################################################################
-    
-    # @app.get("/custom", response_class=HTMLResponse, tags=["UI"])
-    # async def get_custom_chat(request: Request):
-    #     return templates.TemplateResponse("custom.html", {"request": request})
-    
-    # @app.post("/custom", tags=["UI"])
-    # async def chat_stream_endpoint(request: Request):
-    #     injector = request.state.injector
-    #     chat_service = injector.get(ChatService)
-    #     body = await request.json()
-    #     messages = [ChatMessage(**msg) for msg in body["messages"]]
-
-    #     # This calls the same chat service logic as before
-    #     completion_gen = chat_service.stream_chat(messages=messages, use_context=True)
-
-    #     async def stream_generator():
-    #         for chunk in completion_gen.response:
-    #             yield chunk.delta or ""
-
-    #     return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-
-
-
-
+    app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY", "a_very_secret_key"), max_age=SESSION_MAX_AGE)
 
 
 ###############################################################################################
@@ -122,6 +95,7 @@ def create_app(root_injector: Injector) -> FastAPI:
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
         if username == UI_USERNAME and password == UI_PASSWORD:
             request.session["logged_in"] = True
+            request.session["user_role"] = os.getenv("USER_ROLE", "1")
             return RedirectResponse(url="/", status_code=303)
         else:
             return templates.TemplateResponse(
@@ -129,6 +103,35 @@ def create_app(root_injector: Injector) -> FastAPI:
                 {"request": request, "error": "Invalid username or password"},
                 status_code=401,
             )
+        
+
+    @app.get("/logout", tags=["UI"])
+    async def handle_logout(request: Request):
+        request.session.clear()  # Clear the session data
+        return RedirectResponse(url="/login", status_code=303)
+
+
+    @app.get("/api/session/expiry", tags=["UI"])
+    async def get_session_expiry(request: Request):
+        """
+        Provides the session's max_age to the frontend for timers.
+        """
+        if request.session.get("logged_in"):
+            return JSONResponse(content={"max_age": SESSION_MAX_AGE})
+        # Return 0 if not logged in, so no timer is set
+        return JSONResponse(content={"max_age": 0}, status_code=401)
+
+
+
+    @app.get("/api/user/role", tags=["UI"])
+    async def get_user_role(request: Request):
+        """
+        Returns the role of the logged-in user.
+        """
+        role = request.session.get("user_role", "1")  # Default to regular user
+        return JSONResponse(content={"role": role})
+
+
 ################################################################################################
     app.include_router(completions_router)
     app.include_router(chat_router)
