@@ -347,12 +347,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error('Failed to fetch user role.');
             }
             const data = await response.json();
-            // Set a data attribute on the body. CSS will use this to hide elements.
-            document.body.dataset.userRole = data.role;
+            
+            // Get references to the sections to be hidden
+            const uploadControls = document.getElementById('upload-controls');
+            const fileActionControls = document.getElementById('file-action-controls');
+            const chatSettingsSection = document.getElementById('chat-settings-section');
+            const elementsToToggle = [uploadControls, fileActionControls, chatSettingsSection];
+
+            if (data.role === '1') { // Regular User
+                elementsToToggle.forEach(el => {
+                    if (el) el.classList.add('hidden-by-role');
+                });
+            } else { // Admin or other roles
+                 elementsToToggle.forEach(el => {
+                    if (el) el.classList.remove('hidden-by-role');
+                });
+            }
         } catch (error) {
             console.error('Error fetching user role:', error);
-            // Default to the most restrictive role if the API call fails
-            document.body.dataset.userRole = '1';
+            // Default to hiding elements for security if the role check fails
+            const uploadControls = document.getElementById('upload-controls');
+            const fileActionControls = document.getElementById('file-action-controls');
+            const chatSettingsSection = document.getElementById('chat-settings-section');
+            const elementsToToggle = [uploadControls, fileActionControls, chatSettingsSection];
+            elementsToToggle.forEach(el => {
+                if (el) el.classList.add('hidden-by-role');
+            });
         }
     }
 

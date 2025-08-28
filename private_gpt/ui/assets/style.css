@@ -187,8 +187,6 @@ body.dark {
 
 
 
-body[data-user-role="1"] #file-management-section,
-body[data-user-role="1"] #chat-settings-section {
-    display: none;
+.hidden-by-role {
+    display: none !important;
 }
-

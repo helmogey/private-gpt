@@ -55,25 +55,26 @@
                     </svg>
                 </h2>
                 <div class="accordion-content expanded">
-                    <div class="upload-zone" id="upload-zone">
-                        <div class="upload-content">
-                            <div class="upload-icon" id="upload-icon">
-                                <svg width="24" height="24" viewBox="0 0 24 24">
-                                    <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-                                </svg>
+                    <div id="upload-controls">
+                        <div class="upload-zone" id="upload-zone">
+                            <div class="upload-content">
+                                <div class="upload-icon" id="upload-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24">
+                                        <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                                    </svg>
+                                </div>
+                                <p class="upload-text">
+                                    <span class="upload-primary">Upload File(s)</span>
+                                    <span class="upload-secondary">Click or drag files here</span>
+                                </p>
+                                <div class="upload-progress" id="upload-progress">
+                                    <div class="upload-progress-bar" id="upload-progress-bar"></div>
+                                </div>
                             </div>
-                            <p class="upload-text">
-                                <span class="upload-primary">Upload File(s)</span>
-                                <span class="upload-secondary">Click or drag files here</span>
-                            </p>
-                            <div class="upload-progress" id="upload-progress">
-                                <div class="upload-progress-bar" id="upload-progress-bar"></div>
-                            </div>
+                            <input type="file" id="upload-input" multiple hidden>
                         </div>
-                        <input type="file" id="upload-input" multiple hidden>
+                        <div id="upload-status" class="upload-status"></div>
                     </div>
-                    
-                    <div id="upload-status" class="upload-status"></div>
 
                     <div class="file-section">
                         <h3>Ingested Files</h3>
@@ -82,21 +83,23 @@
                         </div>
                     </div>
 
-                    <div class="file-section">
-                        <h3>Selected File</h3>
-                        <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
-                    </div>
+                    <div id="file-action-controls">
+                        <div class="file-section">
+                            <h3>Selected File</h3>
+                            <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
+                        </div>
 
-                    <div class="file-actions">
-                        <button id="deselect-btn" class="icon-button" disabled title="Deselect File">
-                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>
-                        </button>
-                        <button id="delete-selected-btn" class="icon-button" disabled title="Delete Selected File">
-                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
-                        </button>
-                        <button id="delete-all-btn" class="icon-button destructive" title="Delete All Files">
-                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2C13.1,2 14,2.9 14,4C14,5.1 13.1,6 12,6C10.9,6 10,5.1 10,4C10,2.9 10.9,2 12,2M21,9V7L15,1H5C3.89,1 3,1.89 3,3V19A2,2 0 0,0 5,21H11V19H5V3H14V8H19V9H21M15.5,12L18.5,9H16.5V4H14.5V9H12.5L15.5,12Z"/></svg>
-                        </button>
+                        <div class="file-actions">
+                            <button id="deselect-btn" class="icon-button" disabled title="Deselect File">
+                                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>
+                            </button>
+                            <button id="delete-selected-btn" class="icon-button" disabled title="Delete Selected File">
+                                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
+                            </button>
+                            <button id="delete-all-btn" class="icon-button destructive" title="Delete All Files">
+                                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2C13.1,2 14,2.9 14,4C14,5.1 13.1,6 12,6C10.9,6 10,5.1 10,4C10,2.9 10.9,2 12,2M21,9V7L15,1H5C3.89,1 3,1.89 3,3V19A2,2 0 0,0 5,21H11V19H5V3H14V8H19V9H21M15.5,12L18.5,9H16.5V4H14.5V9H12.5L15.5,12Z"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>

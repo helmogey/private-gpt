@@ -11,7 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable
 from fastapi.middleware.cors import CORSMiddleware
 from llama_index.core.settings import Settings as LlamaIndexSettings
-
+import json
 from private_gpt.constants import PROJECT_ROOT_PATH
 from private_gpt.server.chat.chat_router import chat_router
 from private_gpt.server.chunks.chunks_router import chunks_router
@@ -32,8 +32,13 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory=str(PROJECT_ROOT_PATH / "templates"))
-UI_USERNAME = os.getenv("UI_USERNAME")
-UI_PASSWORD = os.getenv("UI_PASSWORD")
+USERS_JSON = os.getenv("USERS", "[]")
+try:
+    # Load the list of user objects from the JSON string
+    USERS = json.loads(USERS_JSON)
+except json.JSONDecodeError:
+    logger.error("Error: Invalid JSON format for USERS in .env file. Please check the format.")
+    USERS = []
 
 # class AuthenticationMiddleware(BaseHTTPMiddleware):
 #     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -93,11 +98,20 @@ def create_app(root_injector: Injector) -> FastAPI:
 
     @app.post("/login", tags=["UI"])
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
-        if username == UI_USERNAME and password == UI_PASSWORD:
+        user_found = None
+        # Iterate through the list of users to find a match
+        for user in USERS:
+            if user.get("username") == username and user.get("password") == password:
+                user_found = user
+                break
+
+        if user_found:
             request.session["logged_in"] = True
-            request.session["user_role"] = os.getenv("USER_ROLE", "1")
+            # Store the specific role of the logged-in user
+            request.session["user_role"] = user_found.get("role", "1")  # Default to regular user
             return RedirectResponse(url="/", status_code=303)
         else:
+            # If no user is found, return an error
             return templates.TemplateResponse(
                 "login.html",
                 {"request": request, "error": "Invalid username or password"},
