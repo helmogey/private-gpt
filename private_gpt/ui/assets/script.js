@@ -120,6 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (indicator) indicator.remove();
         isTyping = false;
     }
+    
+    
+    
 
     async function refreshFileList() {
         try {
@@ -183,6 +186,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             hideTypingIndicator();
+            	
+            
             const botMessageElement = appendMessage('bot', '');
             const botMessageContent = botMessageElement.querySelector('.message-content');
 
@@ -236,7 +241,36 @@ document.addEventListener('DOMContentLoaded', () => {
             setButtonLoading(sendBtn, false);
         }
     }
-
+	
+	
+	async function loadChatHistory() {
+        try {
+            const response = await fetch('/api/chat/history');
+            if (!response.ok) {
+                console.log('No previous chat history found for this user.');
+                return;
+            }
+            const data = await response.json();
+            
+            if (data.history && data.history.length > 0) {
+                chatbot.innerHTML = ''; // Clear any welcome messages
+                
+                data.history.forEach(message => {
+                    const sender = message.role === 'assistant' ? 'bot' : 'user';
+                    appendMessage(sender, message.content);
+                });
+                
+                chatHistory = data.history;
+                chatbot.scrollTop = chatbot.scrollHeight;
+            }
+            
+        } catch (error) {
+            console.error('Error loading chat history:', error);
+            showStatus('Could not load chat history.', 'error');
+        }
+    }
+	
+	
     async function handleFileUpload(files) {
         if (files.length === 0 || isUploading) return;
         isUploading = true;
@@ -448,4 +482,5 @@ document.addEventListener('DOMContentLoaded', () => {
     chatInput.focus();
     fetchUserRole();
     setupSessionTimeout();
+    loadChatHistory();
 });

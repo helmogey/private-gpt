@@ -11,7 +11,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable
 from fastapi.middleware.cors import CORSMiddleware
 from llama_index.core.settings import Settings as LlamaIndexSettings
-import json
 from private_gpt.constants import PROJECT_ROOT_PATH
 from private_gpt.server.chat.chat_router import chat_router
 from private_gpt.server.chunks.chunks_router import chunks_router
@@ -25,20 +24,13 @@ from private_gpt.server.chat.chat_service import ChatService
 from llama_index.core.llms import ChatMessage
 from fastapi import Request, Form
 from fastapi.responses import StreamingResponse
-from dotenv import load_dotenv
-load_dotenv()
+from private_gpt.database import init_db, get_user, verify_password
 
 
 logger = logging.getLogger(__name__)
 
 templates = Jinja2Templates(directory=str(PROJECT_ROOT_PATH / "templates"))
-USERS_JSON = os.getenv("USERS", "[]")
-try:
-    # Load the list of user objects from the JSON string
-    USERS = json.loads(USERS_JSON)
-except json.JSONDecodeError:
-    logger.error("Error: Invalid JSON format for USERS in .env file. Please check the format.")
-    USERS = []
+
 
 # class AuthenticationMiddleware(BaseHTTPMiddleware):
 #     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -50,7 +42,7 @@ except json.JSONDecodeError:
 #         return await call_next(request)
 
 
-SESSION_MAX_AGE = 60
+SESSION_MAX_AGE = 600
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
@@ -79,6 +71,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 def create_app(root_injector: Injector) -> FastAPI:
+    init_db() 
     async def bind_injector_to_request(request: Request) -> None:
         request.state.injector = root_injector
 
@@ -99,26 +92,22 @@ def create_app(root_injector: Injector) -> FastAPI:
 
     @app.post("/login", tags=["UI"])
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
-        user_found = None
-        # Iterate through the list of users to find a match
-        for user in USERS:
-            if user.get("username") == username and user.get("password") == password:
-                user_found = user
-                break
+        db_user = get_user(username)
 
-        if user_found:
+        if db_user and verify_password(password, db_user['hashed_password']):
             request.session["logged_in"] = True
-            # Store the specific role of the logged-in user
-            request.session["user_role"] = user_found.get("role", "1")  # Default to regular user
+            request.session["user_id"] = db_user['id'] # Store user ID for logging
+            request.session["username"] = db_user['username']
+            request.session["user_role"] = db_user['role']
             return RedirectResponse(url="/", status_code=303)
         else:
-            # If no user is found, return an error
+            # If no user is found or password mismatch, return an error
             return templates.TemplateResponse(
                 "login.html",
                 {"request": request, "error": "Invalid username or password"},
                 status_code=401,
             )
-    
+
     @app.get("/logout", tags=["UI"])
     async def handle_logout(request: Request):
         # Clear the session data on the server side

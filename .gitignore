@@ -1,6 +1,8 @@
 .venv
 .env
 venv
+# Ignore user data and databases
+/userdb/
 
 mlruns
 
