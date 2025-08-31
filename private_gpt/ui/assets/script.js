@@ -18,16 +18,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const welcomeMessage = document.getElementById('welcome-message');
     const clearBtn = document.getElementById('clear-btn');
     const modeRadios = document.querySelectorAll('input[name="mode"]');
+    const chatList = document.getElementById('chat-list');
+    const newChatBtn = document.getElementById('new-chat-btn');
 
+    // --- State Variables ---
     let chatHistory = [];
     let selectedFile = null;
-    let currentMode = 'RAG'; // Default mode
+    let currentSessionId = null; 
+    let currentMode = 'RAG';
     let isUploading = false;
     let isTyping = false;
-    let sessionTimeoutId = null; // To hold the session timer
+    let inactivityTimerId = null; 
+    let maxSessionAge = 0; 
 
     // --- Utility Functions ---
-
     function autoResizeTextarea(textarea) {
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
@@ -43,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateUploadProgress(percent) {
-        uploadProgress.classList.toggle('visible', percent > 0);
+        uploadProgress.classList.toggle('visible', percent > 0 && percent < 100);
         uploadProgressBar.style.width = `${percent}%`;
     }
 
@@ -52,12 +56,9 @@ document.addEventListener('DOMContentLoaded', () => {
         button.disabled = loading;
     }
 
-    // --- Core Functions ---
-
+    // --- Core Chat Functions ---
     function appendMessage(sender, message) {
-        if (welcomeMessage) {
-            welcomeMessage.style.display = 'none';
-        }
+        if (welcomeMessage) welcomeMessage.style.display = 'none';
 
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message-bubble', sender);
@@ -70,19 +71,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const content = document.createElement('div');
         content.classList.add('message-content', sender);
-        content.innerHTML = message;
         
-        const actions = document.createElement('div');
-        actions.classList.add('message-actions');
-        actions.innerHTML = `
-            <button class="message-action-button" title="Copy" onclick="copyMessage(this)">
-                <svg width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M16,1H4C2.9,1 2,1.9 2,3V17H4V3H16V1M19,5H8C6.9,5 6,5.9 6,7V21C6,22.1 6.9,23 8,23H19C20.1,23 21,22.1 21,21V7C21,5.9 20.1,5 19,5M19,21H8V7H19V21Z"/></svg>
-            </button>
-        `;
+        content.innerHTML = message.replace(/\n/g, '<br>');
         
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(content);
-        messageDiv.appendChild(actions);
 
         chatbot.appendChild(messageDiv);
         chatbot.scrollTop = chatbot.scrollHeight;
@@ -90,13 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return messageDiv;
     }
     
-    window.copyMessage = function(button) {
-        const content = button.closest('.message-bubble').querySelector('.message-content').innerText;
-        navigator.clipboard.writeText(content).then(() => {
-            showStatus('Copied to clipboard!', 'success');
-        });
-    }
-
     function showTypingIndicator() {
         if (isTyping) return;
         isTyping = true;
@@ -104,13 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
         typingDiv.id = 'typing-indicator';
         typingDiv.classList.add('typing-indicator');
         typingDiv.innerHTML = `
-            <div class="message-avatar bot">
-                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M17.753 14a2.25 2.25 0 0 1 2.25 2.25v.905a3.75 3.75 0 0 1-1.307 2.846C17.13 21.345 14.89 22 12 22c-2.89 0-5.13-.655-6.696-2A3.75 3.75 0 0 1 4 17.155v-.905A2.25 2.25 0 0 1 6.247 14h11.506ZM12 2.25A3.75 3.75 0 0 1 15.75 6v1.5A3.75 3.75 0 0 1 12 11.25 3.75 3.75 0 0 1 8.25 7.5V6A3.75 3.75 0 0 1 12 2.25Z"/></svg>
-            </div>
-            <div class="typing-content">
-                <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
-            </div>
-        `;
+            <div class="message-avatar bot"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M17.753 14a2.25 2.25 0 0 1 2.25 2.25v.905a3.75 3.75 0 0 1-1.307 2.846C17.13 21.345 14.89 22 12 22c-2.89 0-5.13-.655-6.696-2A3.75 3.75 0 0 1 4 17.155v-.905A2.25 2.25 0 0 1 6.247 14h11.506ZM12 2.25A3.75 3.75 0 0 1 15.75 6v1.5A3.75 3.75 0 0 1 12 11.25 3.75 3.75 0 0 1 8.25 7.5V6A3.75 3.75 0 0 1 12 2.25Z"/></svg></div>
+            <div class="typing-content"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
         chatbot.appendChild(typingDiv);
         chatbot.scrollTop = chatbot.scrollHeight;
     }
@@ -120,10 +101,166 @@ document.addEventListener('DOMContentLoaded', () => {
         if (indicator) indicator.remove();
         isTyping = false;
     }
-    
-    
-    
 
+    async function refreshChatList() {
+        chatList.innerHTML = '';
+        try {
+            const response = await fetch('/api/chats');
+            if (!response.ok) throw new Error('Failed to fetch chats.');
+            const sessions = await response.json();
+            sessions.forEach(session => {
+                const li = document.createElement('li');
+                li.className = 'chat-session';
+                li.textContent = session.name || 'Untitled Chat';
+                li.dataset.sessionId = session.session_id;
+                if (session.session_id === currentSessionId) li.classList.add('active');
+                li.addEventListener('click', () => switchChatSession(session.session_id));
+                chatList.appendChild(li);
+            });
+        } catch (error) {
+            console.error('Error refreshing chat list:', error);
+            showStatus('Failed to load chats', 'error');
+        }
+    }
+
+    async function switchChatSession(sessionId) {
+        if (currentSessionId === sessionId) return;
+
+        currentSessionId = sessionId;
+        chatHistory = [];
+        clearChat(false);
+
+        document.querySelectorAll('#chat-list .chat-session').forEach(li => {
+            li.classList.toggle('active', li.dataset.sessionId === sessionId);
+        });
+
+        try {
+            const response = await fetch(`/api/chat/history/${sessionId}`);
+            const data = await response.json();
+            if (data.history) {
+                chatHistory = data.history;
+                data.history.forEach(msg => {
+                    const sender = msg.role === 'assistant' ? 'bot' : 'user';
+                    appendMessage(sender, msg.content);
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching history for session:', sessionId, error);
+            showStatus('Could not load chat history.', 'error');
+        }
+    }
+    
+    function startNewChat() {
+        currentSessionId = null;
+        chatHistory = [];
+        clearChat(false);
+        document.querySelectorAll('#chat-list .chat-session.active').forEach(li => li.classList.remove('active'));
+        chatInput.focus();
+    }
+
+    async function sendMessage() {
+        const message = chatInput.value.trim();
+        if (!message || isTyping) return;
+
+        const isNewChat = !currentSessionId;
+        if (isNewChat) {
+            chatHistory = [];
+        }
+
+        // Pause the session inactivity timer while the model is thinking.
+        clearTimeout(inactivityTimerId);
+
+        appendMessage('user', message);
+        chatHistory.push({ role: 'user', content: message });
+        
+        chatInput.value = '';
+        autoResizeTextarea(chatInput);
+
+        setButtonLoading(sendBtn, true);
+        showTypingIndicator();
+
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: chatHistory,
+                    mode: currentMode,
+                    context_filter: selectedFile ? { docs_ids: [selectedFile] } : null,
+                    session_id: currentSessionId
+                }),
+            });
+             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            let botMessageElement = null;
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let botReply = '';
+            let sources = [];
+            let newSessionIdReceived = null;
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                chunk.split('\n\n').forEach(line => {
+                    if (line.startsWith('data: ')) {
+                        const dataPart = line.substring(6);
+                        if (!dataPart) return;
+                        try {
+                            const parsed = JSON.parse(dataPart);
+                            if (parsed.delta) {
+                                // FIX: On the first response chunk, remove the typing indicator
+                                // and create the message bubble. This prevents duplicate bubbles.
+                                if (!botMessageElement) {
+                                    hideTypingIndicator();
+                                    botMessageElement = appendMessage('bot', '');
+                                }
+                                botReply += parsed.delta;
+                                botMessageElement.querySelector('.message-content').innerHTML = botReply.replace(/\n/g, '<br>');
+                            }
+                            if (parsed.sources) sources = parsed.sources;
+                            if (parsed.session_id && isNewChat) newSessionIdReceived = parsed.session_id;
+                        } catch (e) { console.error('Error parsing streaming data:', e); }
+                    }
+                });
+                chatbot.scrollTop = chatbot.scrollHeight;
+            }
+
+            if (sources.length > 0) {
+                if (!botMessageElement) {
+                    hideTypingIndicator();
+                    botMessageElement = appendMessage('bot', '');
+                }
+                let sourcesHtml = `<div class="message-sources"><div class="sources-title">Sources</div>`;
+                sources.forEach(s => {
+                    sourcesHtml += `<div class="source-item"><div class="source-file">${s.file} (Page ${s.page})</div><div class="source-text">${s.text.substring(0, 100)}...</div></div>`;
+                });
+                sourcesHtml += '</div>';
+                botMessageElement.querySelector('.message-content').innerHTML += sourcesHtml;
+            }
+            
+            chatHistory.push({ role: 'assistant', content: botReply });
+
+            if (newSessionIdReceived) {
+                currentSessionId = newSessionIdReceived;
+                setTimeout(async () => {
+                    await refreshChatList();
+                }, 250);
+            }
+        } catch (error) {
+            console.error('Chat error:', error);
+            showStatus('Failed to send message', 'error');
+        } finally {
+            // This block ensures cleanup happens regardless of success or error.
+            hideTypingIndicator();
+            setButtonLoading(sendBtn, false);
+            resetSessionTimeout();
+        }
+    }
+
+    // --- File Management Functions ---
     async function refreshFileList() {
         try {
             const response = await fetch('/api/files');
@@ -162,115 +299,6 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteSelectedBtn.disabled = true;
     }
 
-    async function sendMessage() {
-        const message = chatInput.value.trim();
-        if (!message || isTyping) return;
-
-        appendMessage('user', message);
-        chatHistory.push({ role: 'user', content: message });
-        chatInput.value = '';
-        autoResizeTextarea(chatInput);
-
-        setButtonLoading(sendBtn, true);
-        showTypingIndicator();
-
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    messages: chatHistory,
-                    mode: currentMode,
-                    context_filter: selectedFile ? { docs_ids: [selectedFile] } : null
-                }),
-            });
-
-            hideTypingIndicator();
-            	
-            
-            const botMessageElement = appendMessage('bot', '');
-            const botMessageContent = botMessageElement.querySelector('.message-content');
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let botReply = '';
-            let sources = [];
-            
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n\n');
-                
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const dataPart = line.substring(6);
-                        if (!dataPart) continue;
-                        
-                        try {
-                            const parsed = JSON.parse(dataPart);
-                            if (parsed.delta) {
-                                botReply += parsed.delta;
-                                botMessageContent.innerHTML = `<p>${botReply}</p>`;
-                            }
-                            if (parsed.sources) sources = parsed.sources;
-                        } catch (e) { console.error('Error parsing streaming data:', e); }
-                    }
-                }
-                chatbot.scrollTop = chatbot.scrollHeight;
-            }
-
-            if (sources.length > 0) {
-                let sourcesHtml = `<div class="message-sources"><div class="sources-title">Sources</div>`;
-                sources.forEach(s => {
-                    sourcesHtml += `<div class="source-item"><div class="source-file">${s.file} (Page ${s.page})</div><div class="source-text">${s.text.substring(0, 100)}...</div></div>`;
-                });
-                sourcesHtml += '</div>';
-                botMessageContent.innerHTML = `<p>${botReply}</p>${sourcesHtml}`;
-            }
-            
-            chatHistory.push({ role: 'assistant', content: botReply });
-
-        } catch (error) {
-            hideTypingIndicator();
-            appendMessage('bot', 'Error: Could not get a response.');
-            console.error('Chat error:', error);
-            showStatus('Failed to send message', 'error');
-        } finally {
-            setButtonLoading(sendBtn, false);
-        }
-    }
-	
-	
-	async function loadChatHistory() {
-        try {
-            const response = await fetch('/api/chat/history');
-            if (!response.ok) {
-                console.log('No previous chat history found for this user.');
-                return;
-            }
-            const data = await response.json();
-            
-            if (data.history && data.history.length > 0) {
-                chatbot.innerHTML = ''; // Clear any welcome messages
-                
-                data.history.forEach(message => {
-                    const sender = message.role === 'assistant' ? 'bot' : 'user';
-                    appendMessage(sender, message.content);
-                });
-                
-                chatHistory = data.history;
-                chatbot.scrollTop = chatbot.scrollHeight;
-            }
-            
-        } catch (error) {
-            console.error('Error loading chat history:', error);
-            showStatus('Could not load chat history.', 'error');
-        }
-    }
-	
-	
     async function handleFileUpload(files) {
         if (files.length === 0 || isUploading) return;
         isUploading = true;
@@ -280,16 +308,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('file', file);
 
-        let progress = 0;
-        const progressInterval = setInterval(() => {
-            progress = Math.min(progress + Math.random() * 15, 90);
-            updateUploadProgress(progress);
-        }, 200);
-
         try {
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress = Math.min(progress + Math.random() * 10, 90);
+                updateUploadProgress(progress);
+            }, 500);
+
             const response = await fetch('/api/upload', { method: 'POST', body: formData });
-            clearInterval(progressInterval);
+            clearInterval(interval);
             updateUploadProgress(100);
+
             if (response.ok) {
                 setTimeout(() => {
                     showStatus('Upload successful!', 'success');
@@ -298,7 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 500);
             } else { throw new Error('Upload failed'); }
         } catch (error) {
-            clearInterval(progressInterval);
             updateUploadProgress(0);
             showStatus('Upload failed', 'error');
             console.error('File upload error:', error);
@@ -337,14 +365,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- UI Enhancement Functions ---
+    // --- UI Enhancement & Role Management ---
     window.toggleAccordion = function(header) {
         header.classList.toggle('collapsed');
         header.nextElementSibling.classList.toggle('collapsed');
     };
 
     function setupDragAndDrop() {
-        ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             uploadZone.addEventListener(eventName, e => e.preventDefault());
         });
         uploadZone.addEventListener('dragover', () => uploadZone.classList.add('drag-over'));
@@ -364,95 +392,69 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
         });
     }
-    
-    function clearChat() {
-        chatbot.innerHTML = '';
-        chatbot.appendChild(welcomeMessage);
-        welcomeMessage.style.display = 'flex';
-        chatHistory = [];
-        showStatus('Chat cleared', 'info');
-    }
 
-    // --- Role Management ---
     async function fetchUserRole() {
         try {
             const response = await fetch('/api/user/role');
-            if (!response.ok) {
-                throw new Error('Failed to fetch user role.');
-            }
+            if (!response.ok) throw new Error('Failed to fetch user role.');
             const data = await response.json();
             
-            // Get references to the sections to be hidden
-            const uploadControls = document.getElementById('upload-controls');
-            const fileActionControls = document.getElementById('file-action-controls');
-            const chatSettingsSection = document.getElementById('chat-settings-section');
-            const elementsToToggle = [uploadControls, fileActionControls, chatSettingsSection];
-
+            const elementsToToggle = document.querySelectorAll('#file-management-section, #chat-settings-section');
             if (data.role === '1') { // Regular User
-                elementsToToggle.forEach(el => {
-                    if (el) el.classList.add('hidden-by-role');
-                });
-            } else { // Admin or other roles
-                 elementsToToggle.forEach(el => {
-                    if (el) el.classList.remove('hidden-by-role');
-                });
+                elementsToToggle.forEach(el => el.classList.add('hidden-by-role'));
+            } else {
+                 elementsToToggle.forEach(el => el.classList.remove('hidden-by-role'));
             }
         } catch (error) {
             console.error('Error fetching user role:', error);
-            // Default to hiding elements for security if the role check fails
-            const uploadControls = document.getElementById('upload-controls');
-            const fileActionControls = document.getElementById('file-action-controls');
-            const chatSettingsSection = document.getElementById('chat-settings-section');
-            const elementsToToggle = [uploadControls, fileActionControls, chatSettingsSection];
-            elementsToToggle.forEach(el => {
-                if (el) el.classList.add('hidden-by-role');
-            });
+            document.querySelectorAll('#file-management-section, #chat-settings-section')
+                .forEach(el => el.classList.add('hidden-by-role'));
         }
     }
 
-    // --- Session Management ---
-    function resetSessionTimeout(maxAgeSeconds) {
-        // Clear any existing timer
-        if (sessionTimeoutId) {
-            clearTimeout(sessionTimeoutId);
-        }
-
-        // Set a new timer if maxAge is valid
-        if (maxAgeSeconds && maxAgeSeconds > 0) {
-            sessionTimeoutId = setTimeout(() => {
-                try {
-                    showStatus('Session expired due to inactivity, logging out...', 'info');
-                    setTimeout(() => {
-                       window.location.href = '/logout';
-                    }, 1500); // Give user a moment to see the message
-                } catch (e) {
-                    console.error("Error showing session expiry message, forcing logout.", e);
-                    window.location.href = '/logout';
-                }
-            }, maxAgeSeconds * 1000);
+    // --- Session Management & Init ---
+    function resetSessionTimeout() {
+        clearTimeout(inactivityTimerId);
+        if (maxSessionAge > 0) {
+            inactivityTimerId = setTimeout(() => {
+                showStatus('Session expired due to inactivity, logging out...', 'info');
+                setTimeout(() => { window.location.href = '/logout'; }, 1500);
+            }, maxSessionAge * 1000);
         }
     }
 
     async function setupSessionTimeout() {
         try {
             const response = await fetch('/api/session/expiry');
-            if (!response.ok) {
-                console.log('Could not fetch session expiry. User might be logged out.');
-                return;
-            }
+            if (!response.ok) return;
             const data = await response.json();
-            const maxAgeSeconds = data.max_age;
-
-            // Set the initial timer
-            resetSessionTimeout(maxAgeSeconds);
-
-            // Add event listeners to reset the timer on any user activity
+            maxSessionAge = data.max_age;
+            resetSessionTimeout();
             ['mousemove', 'keydown', 'click'].forEach(eventName => {
-                document.addEventListener(eventName, () => resetSessionTimeout(maxAgeSeconds));
+                document.addEventListener(eventName, resetSessionTimeout);
             });
-            
         } catch (error) {
             console.error('Error setting up session timeout:', error);
+        }
+    }
+    
+	async function loadInitialChat() {
+        await refreshChatList();
+        const firstChat = chatList.querySelector('.chat-session');
+        if (firstChat) {
+            switchChatSession(firstChat.dataset.sessionId);
+        } else {
+            startNewChat();
+        }
+    }
+    
+    function clearChat(showStatusMsg = true) {
+        chatbot.innerHTML = '';
+        chatbot.appendChild(welcomeMessage);
+        welcomeMessage.style.display = 'flex';
+        if (showStatusMsg) { 
+            chatHistory = [];
+            showStatus('Chat cleared', 'info');
         }
     }
 
@@ -464,15 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
     deselectBtn.addEventListener('click', deselectFile);
     deleteAllBtn.addEventListener('click', deleteAllFiles);
     deleteSelectedBtn.addEventListener('click', deleteSelected);
-    clearBtn.addEventListener('click', clearChat);
-    logoutBtn.addEventListener('click', () => {
-        window.location.href = '/logout';
-    });
-    modeRadios.forEach(radio => {
-        radio.addEventListener('change', (e) => {
-            currentMode = e.target.value;
-        });
-    });
+    newChatBtn.addEventListener('click', startNewChat);
+    clearBtn.addEventListener('click', () => clearChat(true));
+    logoutBtn.addEventListener('click', () => { window.location.href = '/logout'; });
+    modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
 
     // --- Initialization ---
     manageTheme();
@@ -482,5 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
     chatInput.focus();
     fetchUserRole();
     setupSessionTimeout();
-    loadChatHistory();
+    loadInitialChat();
 });
+

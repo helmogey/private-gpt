@@ -5,11 +5,8 @@ from passlib.context import CryptContext
 from private_gpt.constants import PROJECT_ROOT_PATH
 
 # --- Configuration ---
-# Define a dedicated folder for the database
 DB_FOLDER = PROJECT_ROOT_PATH / "userdb"
 DB_FILE = DB_FOLDER / "private_gpt.db"
-
-# Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
 
@@ -22,52 +19,52 @@ def get_db_connection():
 
 def init_db():
     """Initializes the database and creates tables if they don't exist."""
-    # Ensure the userdb directory exists before any database operations
+    DB_FOLDER.mkdir(parents=True, exist_ok=True)
+    conn = get_db_connection()
     try:
-        DB_FOLDER.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        logger.error(f"Fatal: Could not create database directory at {DB_FOLDER}: {e}")
-        return
-
-    if DB_FILE.exists():
-        return # Database already exists
-
-    logger.info("Database not found. Initializing new database...")
-    conn = None # Initialize connection to None for robust error handling
-    try:
-        conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Create users table
-        cursor.execute("""
-            CREATE TABLE users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                hashed_password TEXT NOT NULL,
-                role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-        
-        # Create chat_history table
-        cursor.execute("""
-            CREATE TABLE chat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                session_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                message TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
-            );
-        """)
-        
+        # Check if users table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
+        if cursor.fetchone() is None:
+            # Create users table
+            cursor.execute("""
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    hashed_password TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            create_user('admin', 'admin', 'admin') # Create default admin
+            logger.info("Table 'users' created and default admin added.")
+
+        # Check if chat_history table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history';")
+        if cursor.fetchone() is None:
+            cursor.execute("""
+                CREATE TABLE chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    session_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    session_name TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                );
+            """)
+            logger.info("Table 'chat_history' created.")
+
+        # Add session_name column if it doesn't exist (for backward compatibility)
+        cursor.execute("PRAGMA table_info(chat_history)")
+        columns = [column['name'] for column in cursor.fetchall()]
+        if 'session_name' not in columns:
+            cursor.execute("ALTER TABLE chat_history ADD COLUMN session_name TEXT;")
+            logger.info("Column 'session_name' added to 'chat_history' table.")
+
         conn.commit()
-        logger.info("Database tables 'users' and 'chat_history' created successfully.")
-        
-        # Create a default admin user
-        create_user('admin', 'admin', 'admin')
-        logger.info("Default admin user ('admin'/'admin') created.")
         
     except sqlite3.Error as e:
         logger.error(f"Database error during initialization: {e}")
@@ -77,16 +74,13 @@ def init_db():
 
 # --- Password Utilities ---
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verifies a plain password against a hashed one."""
     return pwd_context.verify(plain_password, hashed_password)
 
 def hash_password(password: str) -> str:
-    """Hashes a plain password."""
     return pwd_context.hash(password)
 
 # --- User Management Functions ---
 def get_user(username: str):
-    """Retrieves a user by username from the database."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -96,7 +90,6 @@ def get_user(username: str):
         conn.close()
 
 def create_user(username: str, password: str, role: str = 'user'):
-    """Creates a new user in the database."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -113,47 +106,64 @@ def create_user(username: str, password: str, role: str = 'user'):
         conn.close()
 
 # --- Chat History Functions ---
-def save_chat_message(user_id: int, session_id: str, role: str, message: str):
-    """Saves a chat message to the database."""
+def save_chat_message(user_id: int, session_id: str, role: str, message: str, is_new_chat: bool):
+    """Saves a chat message, adding a session name if it's a new chat."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
+        session_name = " ".join(message.split()[:5]) if is_new_chat else None
+        
         cursor.execute(
-            "INSERT INTO chat_history (user_id, session_id, role, message) VALUES (?, ?, ?, ?)",
-            (user_id, session_id, role, message)
+            "INSERT INTO chat_history (user_id, session_id, role, message, session_name) VALUES (?, ?, ?, ?, ?)",
+            (user_id, session_id, role, message, session_name)
         )
         conn.commit()
     finally:
         conn.close()
 
-def get_chat_history(user_id: int):
-    """Retrieves the most recent chat session history for a given user."""
+def get_all_chat_sessions(user_id: int):
+    """
+    Retrieves all distinct chat sessions for a given user, correctly named.
+    """
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        # Find the most recent session_id for the user
-        latest_session = cursor.execute(
-            "SELECT session_id FROM chat_history WHERE user_id = ? ORDER BY timestamp DESC LIMIT 1",
-            (user_id,)
-        ).fetchone()
+        # FIX: This query correctly finds the first message in each session and uses its
+        # session_name to identify the chat, avoiding the user_id bug.
+        sessions = cursor.execute("""
+            SELECT
+                t1.session_id,
+                t1.session_name
+            FROM chat_history t1
+            INNER JOIN (
+                SELECT session_id, MIN(timestamp) as min_ts
+                FROM chat_history
+                WHERE user_id = ?
+                GROUP BY session_id
+            ) t2 ON t1.session_id = t2.session_id AND t1.timestamp = t2.min_ts
+            WHERE t1.user_id = ?
+            ORDER BY t1.timestamp DESC
+        """, (user_id, user_id)).fetchall()
+        
+        return [{"session_id": row["session_id"], "name": row["session_name"]} for row in sessions]
+    finally:
+        conn.close()
 
-        if not latest_session:
-            return {"session_id": None, "messages": []}
-
-        latest_session_id = latest_session['session_id']
-
-        # Retrieve all messages for that session, ordered by when they were created
+def get_chat_history_by_session(user_id: int, session_id: str):
+    """Retrieves the chat history for a specific session."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
         messages = cursor.execute(
             "SELECT role, message FROM chat_history WHERE user_id = ? AND session_id = ? ORDER BY timestamp ASC",
-            (user_id, latest_session_id)
+            (user_id, session_id)
         ).fetchall()
         
-        # Format for the frontend
         history = [{"role": row["role"], "content": row["message"]} for row in messages]
-        return {"session_id": latest_session_id, "messages": history}
+        return {"session_id": session_id, "messages": history}
     except Exception as e:
-        logger.error(f"Error fetching chat history: {e}")
-        return {"session_id": None, "messages": []}
+        logger.error(f"Error fetching chat history for session {session_id}: {e}")
+        return {"session_id": session_id, "messages": []}
     finally:
         conn.close()
 

@@ -186,6 +186,22 @@ body.dark {
 @media (max-width: 768px) { #main-container { flex-direction: column; padding: 0.5rem; gap: 0.5rem; } .sidebar { flex: none; height: auto; order: 2; } #col { order: 1; height: 60vh; } }
 
 
+/* --- 5. CHAT SESSIONS STYLING --- */
+.file-list li.chat-session {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.file-list li.chat-session.active {
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-weight: 600;
+}
+
+.file-list li.chat-session:not(.active):hover {
+    background: var(--background-muted);
+}
 
 .hidden-by-role {
     display: none !important;

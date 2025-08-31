@@ -103,7 +103,29 @@
                     </div>
                 </div>
             </section>
-
+            
+			<!-- Chat tabs -->
+			<section class="accordion" id="chat-sessions-section">
+				<h2 class="accordion-header" onclick="toggleAccordion(this)">
+					<span>💬 Chat Sessions</span>
+					<svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
+						<path fill="currentColor" d="m7 10 5 5 5-5z"/>
+					</svg>
+				</h2>
+				<div class="accordion-content">
+					<button id="new-chat-btn" class="icon-button" style="width: 100%; justify-content: flex-start; gap: 0.5rem;">
+						<svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+						New Chat
+					</button>
+					<div class="file-list-container" style="margin-top: 0.5rem;">
+						<ul id="chat-list" class="file-list">
+							<!-- Chat tabs will be dynamically inserted here -->
+						</ul>
+					</div>
+				</div>
+			</section>
+			
+			
             <!-- Chat Settings Section -->
             <section class="accordion" id="chat-settings-section">
                 <h2 class="accordion-header" onclick="toggleAccordion(this)">
