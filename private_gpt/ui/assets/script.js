@@ -19,10 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeRadios = document.querySelectorAll('input[name="mode"]');
     const chatList = document.getElementById('chat-list');
     const newChatBtn = document.getElementById('new-chat-btn');
+    
+    // Admin Modal Elements
     const createUserForm = document.getElementById('create-user-form');
     const newUsernameInput = document.getElementById('new-username');
     const newPasswordInput = document.getElementById('new-password');
     const newUserRoleSelect = document.getElementById('new-user-role');
+    const newUserTeamSelect = document.getElementById('new-user-team');
     const createUserStatus = document.getElementById('create-user-status');
     const userList = document.getElementById('user-list');
     
@@ -34,16 +37,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminPanelLink = document.getElementById('admin-panel-link');
     const adminModal = document.getElementById('admin-modal');
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
-
-    // Profile Settings Modal Elements
     const profileSettingsLink = document.getElementById('profile-settings-link');
     const profileModal = document.getElementById('profile-modal');
     const profileModalCloseBtn = document.getElementById('profile-modal-close-btn');
-    const profileUpdateForm = document.getElementById('profile-update-form');
+    const profileSettingsForm = document.getElementById('profile-settings-form');
     const profileNameInput = document.getElementById('profile-name');
     const profileEmailInput = document.getElementById('profile-email');
     const profileNewPasswordInput = document.getElementById('profile-new-password');
-    const updateProfileStatus = document.getElementById('update-profile-status');
+    const profileSettingsStatus = document.getElementById('profile-settings-status');
 
 
     // --- State Variables ---
@@ -54,7 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isUploading = false;
     let isTyping = false;
     let inactivityTimerId = null; 
-    let maxSessionAge = 0; 
+    let maxSessionAge = 0;
+    let currentUsername = null; 
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
@@ -169,8 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     appendMessage(sender, msg.content);
                 });
             }
-        } catch (error)
-        {
+        } catch (error) {
             console.error('Error fetching history for session:', sessionId, error);
             showStatus('Could not load chat history.', 'error');
         }
@@ -194,7 +195,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         clearTimeout(inactivityTimerId);
-
         appendMessage('user', message);
         chatHistory.push({ role: 'user', content: message });
         
@@ -268,9 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (newSessionIdReceived) {
                 currentSessionId = newSessionIdReceived;
-                setTimeout(async () => {
-                    await refreshChatList();
-                }, 250);
+                await refreshChatList();
             }
         } catch (error) {
             console.error('Chat error:', error);
@@ -374,7 +372,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
     async function deleteAllFiles() {
         if (!confirm("Are you sure you want to delete ALL ingested files?")) return;
         try {
@@ -439,7 +436,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Failed to fetch user info.');
             const data = await response.json();
             
-            profileUsername.textContent = data.username;
+            currentUsername = data.username;
+            profileUsername.textContent = data.display_name || data.username;
             profileRole.textContent = data.role;
             profileRole.className = `user-role ${data.role}`;
 
@@ -451,6 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     el.classList.remove('hidden-by-role');
                 });
                 await refreshUserList();
+                await populateTeamsDropdown();
             }
         } catch (error) {
             console.error('Error fetching user info:', error);
@@ -503,7 +502,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Admin & Profile Panel Functions ---
+    // --- Admin Panel Functions ---
+    async function populateTeamsDropdown() {
+        if (!newUserTeamSelect) return;
+        try {
+            const response = await fetch('/api/admin/teams');
+            if (!response.ok) throw new Error('Failed to fetch teams');
+            const teams = await response.json();
+            newUserTeamSelect.innerHTML = '';
+            teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team;
+                option.textContent = team;
+                newUserTeamSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error populating teams dropdown:', error);
+            newUserTeamSelect.innerHTML = '<option value="Default">Default</option>';
+        }
+    }
+
     async function refreshUserList() {
         try {
             const response = await fetch('/api/admin/users');
@@ -514,9 +532,19 @@ document.addEventListener('DOMContentLoaded', () => {
             userList.innerHTML = '';
             users.forEach(user => {
                 const li = document.createElement('li');
+                const isDeletable = user.username !== 'admin' && user.username !== currentUsername;
+
                 li.innerHTML = `
-                    <span>${user.username}</span>
-                    <span class="user-role ${user.role}">${user.role}</span>
+                    <div class="user-details-container">
+                        <div class="user-info">
+                            <span>${user.username}</span>
+                            <span class="user-team">${user.team || 'No Team'}</span>
+                        </div>
+                        <span class="user-role ${user.role}">${user.role}</span>
+                    </div>
+                    <button class="delete-user-btn" data-username="${user.username}" title="Delete User" ${!isDeletable ? 'disabled' : ''}>
+                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
+                    </button>
                 `;
                 userList.appendChild(li);
             });
@@ -531,6 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const username = newUsernameInput.value.trim();
         const password = newPasswordInput.value.trim();
         const role = newUserRoleSelect.value;
+        const team = newUserTeamSelect.value;
 
         if (!username || !password) {
             showStatus('Username and password are required.', 'error', createUserStatus);
@@ -542,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/admin/create-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, role }),
+                body: JSON.stringify({ username, password, role, team }),
             });
 
             const result = await response.json();
@@ -560,7 +589,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function handleProfileUpdate(event) {
+    async function handleDeleteUser(username) {
+        if (!confirm(`Are you sure you want to permanently delete the user '${username}'? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            showStatus('Deleting user...', 'loading', createUserStatus);
+            const response = await fetch(`/api/admin/users/${username}`, {
+                method: 'DELETE',
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showStatus(result.message, 'success', createUserStatus);
+                await refreshUserList();
+            } else {
+                throw new Error(result.detail || 'Failed to delete user.');
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            showStatus(error.message, 'error', createUserStatus);
+        }
+    }
+
+    // --- Profile Settings Functions ---
+    async function handleUpdateProfile(event) {
         event.preventDefault();
         const name = profileNameInput.value.trim();
         const email = profileEmailInput.value.trim();
@@ -572,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            showStatus('Updating profile...', 'loading', updateProfileStatus);
+            showStatus('Updating profile...', 'loading', profileSettingsStatus);
             const response = await fetch('/api/user/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -582,17 +637,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (response.ok) {
-                showStatus(result.message, 'success', updateProfileStatus);
+                showStatus(result.message, 'success', profileSettingsStatus);
                 profileNewPasswordInput.value = ''; // Clear password field
-                setTimeout(() => {
-                    profileModal.classList.add('hidden');
-                }, 1500);
+                await fetchUserInfo(); // Refresh display name in header
             } else {
                 throw new Error(result.detail || 'Failed to update profile.');
             }
         } catch (error) {
             console.error('Error updating profile:', error);
-            showStatus(error.message, 'error', updateProfileStatus);
+            showStatus(error.message, 'error', profileSettingsStatus);
         }
     }
 
@@ -608,12 +661,9 @@ document.addEventListener('DOMContentLoaded', () => {
     clearBtn.addEventListener('click', () => clearChat(true));
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
     
-    if (createUserForm) {
-        createUserForm.addEventListener('submit', handleCreateUser);
-    }
-    if (profileUpdateForm) {
-        profileUpdateForm.addEventListener('submit', handleProfileUpdate);
-    }
+    // Modals and Dropdowns
+    if (createUserForm) createUserForm.addEventListener('submit', handleCreateUser);
+    if (profileSettingsForm) profileSettingsForm.addEventListener('submit', handleUpdateProfile);
     
     profileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -631,19 +681,33 @@ document.addEventListener('DOMContentLoaded', () => {
         profileModal.classList.remove('hidden');
         profileDropdown.classList.remove('show');
     });
-    
-    function closeModalOnClickOutside(modal, closeBtn) {
-        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) modal.classList.add('hidden');
+
+    [adminModalCloseBtn, profileModalCloseBtn].forEach(btn => {
+        btn.addEventListener('click', () => {
+            adminModal.classList.add('hidden');
+            profileModal.classList.add('hidden');
         });
-    }
-    closeModalOnClickOutside(adminModal, adminModalCloseBtn);
-    closeModalOnClickOutside(profileModal, profileModalCloseBtn);
+    });
+
+    [adminModal, profileModal].forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    });
     
     window.addEventListener('click', (e) => {
         if (!profileDropdown.contains(e.target) && !profileBtn.contains(e.target)) {
             profileDropdown.classList.remove('show');
+        }
+    });
+
+    userList.addEventListener('click', (event) => {
+        const deleteButton = event.target.closest('.delete-user-btn');
+        if (deleteButton && !deleteButton.disabled) {
+            const username = deleteButton.dataset.username;
+            handleDeleteUser(username);
         }
     });
 

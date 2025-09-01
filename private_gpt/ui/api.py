@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from typing import Any, List
 import asyncio
@@ -20,8 +21,10 @@ from private_gpt.database import (
     get_user,
     update_user_details,
     update_user_password,
+    delete_user,
 )
 from private_gpt.di import global_injector
+from private_gpt.server.chat.chat_service import ChatService
 from private_gpt.server.chunks.chunks_service import ChunksService
 from private_gpt.settings.settings import settings
 
@@ -32,18 +35,19 @@ class Modes(str, Enum):
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-def get_ui() -> "PrivateGptUi":
-    from private_gpt.ui.ui import PrivateGptUi 
-    return global_injector.get(PrivateGptUi)
+# --- Dependency Injectors ---
+
+def get_chat_service() -> ChatService:
+    return global_injector.get(ChatService)
 
 def get_chunks_service() -> ChunksService:
     return global_injector.get(ChunksService)
 
-class ChatBody(BaseModel):
-    messages: list[dict[str, str]]
-    mode: str = "RAG"
-    context_filter: dict | None = None
-    session_id: str | None = None
+def get_ingest_service() -> "IngestService":
+    from private_gpt.server.ingest.ingest_service import IngestService
+    return global_injector.get(IngestService)
+
+# --- Utility and Authentication ---
 
 async def require_admin(request: Request):
     """Dependency to check if the user has an 'admin' role."""
@@ -51,12 +55,32 @@ async def require_admin(request: Request):
         raise HTTPException(status_code=403, detail="Forbidden: Requires admin privileges")
     return True
 
-# --- User Session & Info ---
+# --- Pydantic Models ---
+
+class ChatBody(BaseModel):
+    messages: list[dict[str, str]]
+    mode: str = "RAG"
+    context_filter: dict | None = None
+    session_id: str | None = None
+
+class CreateUserBody(BaseModel):
+    username: str
+    password: str
+    role: str
+    team: str
+
+class UpdateUserBody(BaseModel):
+    name: str
+    email: str
+    new_password: str | None = None
+
+# --- UI Session & User Info Endpoints ---
 
 @api_router.get("/session/expiry")
 def get_session_expiry(request: Request):
-    max_age = request.app.state.session_max_age
-    return JSONResponse(content={"max_age": max_age if request.session.get("logged_in") else 0})
+    if request.session.get("logged_in"):
+        return JSONResponse(content={"max_age": settings().server.session_max_age})
+    return JSONResponse(content={"max_age": 0}, status_code=401)
 
 @api_router.get("/user/info")
 def get_user_info(request: Request):
@@ -69,12 +93,28 @@ def get_user_info(request: Request):
     if not db_user:
         return JSONResponse(content={"error": "User not found"}, status_code=404)
 
+    display_name = db_user['name'] if db_user['name'] else db_user['username']
+
     return JSONResponse(content={
         "username": db_user['username'],
         "role": db_user['role'],
         "name": db_user['name'],
         "email": db_user['email'],
+        "display_name": display_name,
     })
+
+@api_router.post("/user/update")
+async def handle_update_user(request: Request, body: UpdateUserBody):
+    if not request.session.get("logged_in"):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    username = request.session.get("username")
+    update_user_details(username, body.name, body.email)
+
+    if body.new_password:
+        update_user_password(username, body.new_password)
+    
+    return JSONResponse(content={"message": "Profile updated successfully."}, status_code=200)
 
 # --- Chat Endpoints ---
 
@@ -94,15 +134,15 @@ async def get_history_by_session(session_id: str, request: Request):
     history_data = get_chat_history_by_session(user_id, session_id)
     return JSONResponse(content={"history": history_data["messages"]})
 
+
 @api_router.post("/chat")
 async def chat(
     request: Request, 
-    ui: "PrivateGptUi" = Depends(get_ui),
+    chat_body: ChatBody,
+    chat_service: ChatService = Depends(get_chat_service),
     chunks_service: ChunksService = Depends(get_chunks_service)
 ):
     user_id = request.session.get("user_id")
-    body = await request.json()
-    chat_body = ChatBody.parse_obj(body)
     
     session_id = chat_body.session_id
     is_new_chat = not session_id
@@ -114,12 +154,11 @@ async def chat(
     current_day = datetime.now().day
     processed_message = last_message.content.lower().replace("today's", f"at Day {current_day}").replace("today", f"at Day {current_day}")
     sanitized_content = processed_message.replace("{", "{{").replace("}", "}}")
+
+    if user_id:
+        save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
     
     if chat_body.mode == Modes.SEARCH_MODE:
-        # For search mode, save user message and assistant message together
-        if user_id:
-            save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
-
         n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
         relevant_chunks = chunks_service.retrieve_relevant(text=sanitized_content, limit=n_chunks, prev_next_chunks=0)
         
@@ -139,59 +178,58 @@ async def chat(
         
         if user_id:
             save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
-        
+
         async def search_stream_generator():
             if is_new_chat:
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
             yield f"data: {json.dumps({'delta': search_response_text})}\n\n"
-            yield f"data: {json.dumps({'sources': sources_data})}\n\n"
+            if sources_data:
+                yield f"data: {json.dumps({'sources': sources_data})}\n\n"
 
         return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
 
-    # RAG Mode
-    else:
+    messages[-1] = ChatMessage(role=last_message.role, content=sanitized_content)
+
+    completion_gen = chat_service.stream_chat(
+        messages=messages,
+        use_context=True,
+        context_filter=chat_body.context_filter,
+    )
+
+    async def stream_generator():
+        full_response = ""
+        if is_new_chat:
+            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+            
+        for delta in completion_gen.response:
+            text_delta = delta if isinstance(delta, str) else delta.delta
+            full_response += text_delta
+            yield f"data: {json.dumps({'delta': text_delta})}\n\n"
+            await asyncio.sleep(0.02)
+        
         if user_id:
-            save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
-            
-        messages[-1] = ChatMessage(role=last_message.role, content=sanitized_content)
+            save_chat_message(user_id, session_id, 'assistant', full_response, False)
+        
+        if completion_gen.sources:
+            sources_data = [
+                {
+                    "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
+                    "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
+                    "text": chunk.text,
+                }
+                for chunk in completion_gen.sources
+            ]
+            yield f"data: {json.dumps({'sources': sources_data})}\n\n"
 
-        completion_gen = ui._chat_service.stream_chat(
-            messages=messages,
-            use_context=True,
-            context_filter=chat_body.context_filter,
-        )
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-        async def stream_generator():
-            full_response = ""
-            if is_new_chat:
-                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-                
-            for delta in completion_gen.response:
-                text_delta = delta if isinstance(delta, str) else delta.delta
-                full_response += text_delta
-                yield f"data: {json.dumps({'delta': text_delta})}\n\n"
-                await asyncio.sleep(0.02)
-            
-            if user_id:
-                save_chat_message(user_id, session_id, 'assistant', full_response, False)
-            
-            if completion_gen.sources:
-                sources_data = [
-                    {
-                        "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
-                        "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
-                        "text": chunk.text,
-                    }
-                    for chunk in completion_gen.sources
-                ]
-                yield f"data: {json.dumps({'sources': sources_data})}\n\n"
-
-        return StreamingResponse(stream_generator(), media_type="text/event-stream")
-
-# --- File Management ---
+# --- File Management Endpoints ---
 
 @api_router.post("/upload", dependencies=[Depends(require_admin)])
-async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" = Depends(get_ui)):
+async def upload_files(
+    files: List[UploadFile] = File(...), 
+    ingest_service: "IngestService" = Depends(get_ingest_service)
+):
     temp_paths = []
     ingest_data = []
     
@@ -209,7 +247,7 @@ async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" =
             ingest_data.append((str(file.filename), temp_path))
 
         if ingest_data:
-            ui._ingest_service.bulk_ingest(ingest_data)
+            ingest_service.bulk_ingest(ingest_data)
             
     finally:
         for path in temp_paths:
@@ -219,70 +257,77 @@ async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" =
     return JSONResponse(content={"message": f"{len(files)} file(s) uploaded successfully"}, status_code=200)
 
 @api_router.get("/files")
-def list_ingested_files(ui: "PrivateGptUi" = Depends(get_ui)):
+def list_ingested_files(ingest_service: "IngestService" = Depends(get_ingest_service)):
     files = set()
-    for ingested_document in ui._ingest_service.list_ingested():
+    for ingested_document in ingest_service.list_ingested():
         if ingested_document.doc_metadata:
             files.add(ingested_document.doc_metadata.get("file_name", "[FILE NAME MISSING]"))
     return JSONResponse(content=[[row] for row in sorted(list(files))])
 
 @api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
-def delete_selected_file(file_name: str, ui: "PrivateGptUi" = Depends(get_ui)):
-    for doc in ui._ingest_service.list_ingested():
+def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
+    for doc in ingest_service.list_ingested():
         if doc.doc_metadata and doc.doc_metadata.get("file_name") == file_name:
-            ui._ingest_service.delete(doc.doc_id)
+            ingest_service.delete(doc.doc_id)
     return {"message": f"File '{file_name}' deleted successfully"}
 
 @api_router.delete("/files", dependencies=[Depends(require_admin)])
-def delete_all_files(ui: "PrivateGptUi" = Depends(get_ui)):
-    ingested_files = ui._ingest_service.list_ingested()
+def delete_all_files(ingest_service: "IngestService" = Depends(get_ingest_service)):
+    ingested_files = ingest_service.list_ingested()
     for doc in ingested_files:
-        ui._ingest_service.delete(doc.doc_id)
+        ingest_service.delete(doc.doc_id)
     return {"message": "All files deleted successfully"}
 
-# --- Admin & Profile Endpoints ---
+# --- Admin Endpoints ---
 
-class UserUpdateBody(BaseModel):
-    name: str | None = None
-    email: str | None = None
-    new_password: str | None = None
-
-@api_router.post("/user/update")
-async def handle_update_user(request: Request, body: UserUpdateBody):
-    user_id = request.session.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-        
-    try:
-        update_user_details(user_id, body.name, body.email)
-        if body.new_password:
-            update_user_password(user_id, body.new_password)
-        return JSONResponse(content={"message": "Profile updated successfully."}, status_code=200)
-    except Exception as e:
-        logger.error(f"Error updating user: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while updating profile.")
+@api_router.get("/admin/teams")
+async def get_teams_list():
+    """Provides the list of available teams from environment variables."""
+    teams_str = os.getenv("TEAMS_LIST", "Default")
+    teams_list = [team.strip() for team in teams_str.split(',')]
+    return JSONResponse(content=teams_list)
 
 @api_router.get("/admin/users", dependencies=[Depends(require_admin)])
 async def list_users():
+    """Lists all users. Admin only."""
     users = get_all_users()
     return JSONResponse(content=users)
 
-class CreateUserBody(BaseModel):
-    username: str
-    password: str
-    role: str
-
 @api_router.post("/admin/create-user", dependencies=[Depends(require_admin)])
 async def handle_create_user(body: CreateUserBody):
+    """Creates a new user. Admin only."""
     if get_user(body.username):
         raise HTTPException(status_code=400, detail="Username already exists")
     if body.role not in ['admin', 'user']:
         raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'user'.")
+    
+    teams_str = os.getenv("TEAMS_LIST", "Default")
+    teams_list = [team.strip() for team in teams_str.split(',')]
+    if body.team not in teams_list:
+        raise HTTPException(status_code=400, detail=f"Invalid team '{body.team}'. Must be one of {teams_list}")
         
     try:
-        create_user(body.username, body.password, body.role)
+        create_user(body.username, body.password, body.role, body.team)
         return JSONResponse(content={"message": f"User '{body.username}' created successfully."}, status_code=201)
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while creating user.")
+    
+
+@api_router.delete("/admin/users/{username}", dependencies=[Depends(require_admin)])
+async def handle_delete_user(username: str, request: Request):
+    """Deletes a user. Admin only."""
+    logged_in_user = request.session.get("username")
+    if username == logged_in_user:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+
+    try:
+        delete_user(username)
+        return JSONResponse(content={"message": f"User '{username}' deleted successfully."}, status_code=200)
+    except ValueError as e:
+        # This will catch the "admin cannot be deleted" error
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error deleting user '{username}': {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while deleting user.")
 

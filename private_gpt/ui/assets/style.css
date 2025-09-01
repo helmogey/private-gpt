@@ -203,7 +203,6 @@ body.dark {
     display: none !important;
 }
 
-/* +++ START ADDITION +++ */
 /* --- 6. ADMIN PANEL STYLES --- */
 .admin-form-container {
     display: flex;
@@ -223,11 +222,10 @@ body.dark {
     color: var(--foreground-muted);
 }
 
-/* --- EDIT START: Add hint style --- */
 .form-hint {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--foreground-subtle);
-    margin-bottom: 0.75rem;
+    margin-top: 0.25rem;
 }
 
 .user-list-section h3 {
@@ -244,6 +242,21 @@ body.dark {
     font-size: 0.875rem;
 }
 
+.user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.user-team {
+    font-size: 0.75rem;
+    color: var(--foreground-muted);
+    background-color: var(--background-muted);
+    padding: 0.1rem 0.4rem;
+    border-radius: var(--radius-sm);
+    margin-top: 0.25rem;
+}
+
 #user-list .user-role {
     font-size: 0.75rem;
     padding: 0.2rem 0.5rem;
@@ -257,6 +270,35 @@ body.dark {
     background: hsla(262, 83%, 58%, 0.1);
     color: var(--primary);
     font-weight: 600;
+}
+
+.user-details-container {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.delete-user-btn {
+    background: transparent;
+    border: none;
+    color: var(--foreground-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.delete-user-btn:hover:not(:disabled) {
+    background: hsla(0, 84.2%, 60.2%, 0.1);
+    color: hsl(0, 72.2%, 50.6%);
+}
+
+.delete-user-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 /* --- 7. PROFILE DROPDOWN --- */
@@ -362,5 +404,4 @@ body.dark {
 
 /* Responsive Design */
 @media (max-width: 768px) { #main-container { flex-direction: column; padding: 0.5rem; gap: 0.5rem; } .sidebar { flex: none; height: auto; order: 2; } #col { order: 1; height: 60vh; } }
-
 
