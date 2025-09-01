@@ -111,7 +111,9 @@ async def chat(
 
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
-    sanitized_content = last_message.content.replace("{", "{{").replace("}", "}}")
+    current_day = datetime.now().day
+    processed_message = last_message.content.lower().replace("today's", f"at Day {current_day}").replace("today", f"at Day {current_day}")
+    sanitized_content = processed_message.replace("{", "{{").replace("}", "}}")
     
     if chat_body.mode == Modes.SEARCH_MODE:
         # For search mode, save user message and assistant message together
