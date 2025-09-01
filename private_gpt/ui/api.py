@@ -6,11 +6,21 @@ import json
 from enum import Enum
 from datetime import datetime
 from uuid import uuid4
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from llama_index.core.llms import ChatMessage, MessageRole
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse, JSONResponse
+
+from private_gpt.database import (
+    save_chat_message, 
+    get_all_chat_sessions, 
+    get_chat_history_by_session,
+    create_user,
+    get_all_users,
+    get_user
+)
 
 from private_gpt.database import save_chat_message, get_all_chat_sessions, get_chat_history_by_session
 from private_gpt.di import global_injector
@@ -38,6 +48,14 @@ class ChatBody(BaseModel):
     mode: str = "RAG"
     context_filter: dict | None = None
     session_id: str | None = None
+
+
+
+async def require_admin(request: Request):
+    """Dependency to check if the user has an 'admin' role."""
+    if request.session.get("user_role") != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden: Requires admin privileges")
+    return True
 
 # --- API Endpoints ---
 
@@ -179,4 +197,35 @@ def delete_all_files(ui: "PrivateGptUi" = Depends(get_ui)):
     for doc in ingested_files:
         ui._ingest_service.delete(doc.doc_id)
     return {"message": "All files deleted successfully"}
+
+
+# --- Admin Endpoints ---
+
+@api_router.get("/admin/users", dependencies=[Depends(require_admin)])
+async def list_users():
+    """Lists all users. Admin only."""
+    users = get_all_users()
+    return JSONResponse(content=users)
+
+class CreateUserBody(BaseModel):
+    username: str
+    password: str
+    role: str
+
+@api_router.post("/admin/create-user", dependencies=[Depends(require_admin)])
+async def handle_create_user(body: CreateUserBody):
+    """Creates a new user. Admin only."""
+    if get_user(body.username):
+        raise HTTPException(status_code=400, detail="Username already exists")
+    if body.role not in ['admin', 'user']:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'user'.")
+        
+    try:
+        create_user(body.username, body.password, body.role)
+        return JSONResponse(content={"message": f"User '{body.username}' created successfully."}, status_code=201)
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while creating user.")
+    
+
 

@@ -144,6 +144,19 @@ def create_app(root_injector: Injector) -> FastAPI:
         """
         role = request.session.get("user_role", "1")  # Default to regular user
         return JSONResponse(content={"role": role})
+    
+
+    @app.get("/api/user/info", tags=["UI"])
+    async def get_user_info(request: Request):
+        """
+        Returns the role and username of the logged-in user.
+        """
+        if not request.session.get("logged_in"):
+            return JSONResponse(content={"error": "Not authenticated"}, status_code=401)
+            
+        role = request.session.get("user_role", "user")
+        username = request.session.get("username", "User")
+        return JSONResponse(content={"role": role, "username": username})
 
 
 ################################################################################################

@@ -105,6 +105,18 @@ def create_user(username: str, password: str, role: str = 'user'):
     finally:
         conn.close()
 
+# +++ START ADDITION +++
+def get_all_users():
+    """Retrieves all users from the database."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        users = cursor.execute("SELECT id, username, role, created_at FROM users ORDER BY created_at DESC").fetchall()
+        return [dict(row) for row in users]
+    finally:
+        conn.close()
+# +++ END ADDITION +++
+
 # --- Chat History Functions ---
 def save_chat_message(user_id: int, session_id: str, role: str, message: str, is_new_chat: bool):
     """Saves a chat message, adding a session name if it's a new chat."""
@@ -164,6 +176,3 @@ def get_chat_history_by_session(user_id: int, session_id: str):
     except Exception as e:
         logger.error(f"Error fetching chat history for session {session_id}: {e}")
         return {"session_id": session_id, "messages": []}
-    finally:
-        conn.close()
-

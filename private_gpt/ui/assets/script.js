@@ -14,12 +14,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const deleteSelectedBtn = document.getElementById('delete-selected-btn');
     const deleteAllBtn = document.getElementById('delete-all-btn');
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
-    const logoutBtn = document.getElementById('logout-btn');
     const welcomeMessage = document.getElementById('welcome-message');
     const clearBtn = document.getElementById('clear-btn');
     const modeRadios = document.querySelectorAll('input[name="mode"]');
     const chatList = document.getElementById('chat-list');
     const newChatBtn = document.getElementById('new-chat-btn');
+    const createUserForm = document.getElementById('create-user-form');
+    const newUsernameInput = document.getElementById('new-username');
+    const newPasswordInput = document.getElementById('new-password');
+    const newUserRoleSelect = document.getElementById('new-user-role');
+    const createUserStatus = document.getElementById('create-user-status');
+    const userList = document.getElementById('user-list');
+    
+    // Profile & Admin Modal Elements
+    const profileBtn = document.getElementById('profile-btn');
+    const profileDropdown = document.getElementById('profile-dropdown');
+    const profileUsername = document.getElementById('profile-username');
+    const profileRole = document.getElementById('profile-role');
+    const adminPanelLink = document.getElementById('admin-panel-link');
+    const adminModal = document.getElementById('admin-modal');
+    const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
+
 
     // --- State Variables ---
     let chatHistory = [];
@@ -37,12 +52,12 @@ document.addEventListener('DOMContentLoaded', () => {
         textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
     }
 
-    function showStatus(message, type = 'info') {
-        uploadStatus.textContent = message;
-        uploadStatus.className = `upload-status ${type}`;
-        uploadStatus.style.display = 'block';
+    function showStatus(message, type = 'info', element = uploadStatus) {
+        element.textContent = message;
+        element.className = `upload-status ${type}`;
+        element.style.display = 'block';
         if (type !== 'loading') {
-            setTimeout(() => { uploadStatus.style.display = 'none'; }, 3000);
+            setTimeout(() => { element.style.display = 'none'; }, 3000);
         }
     }
 
@@ -393,22 +408,42 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function fetchUserRole() {
+    async function fetchUserInfo() {
         try {
-            const response = await fetch('/api/user/role');
-            if (!response.ok) throw new Error('Failed to fetch user role.');
+            const response = await fetch('/api/user/info');
+            if (!response.ok) throw new Error('Failed to fetch user info.');
             const data = await response.json();
             
-            const elementsToToggle = document.querySelectorAll('#file-management-section, #chat-settings-section');
-            if (data.role === '1') { // Regular User
-                elementsToToggle.forEach(el => el.classList.add('hidden-by-role'));
+            // Update profile dropdown
+            profileUsername.textContent = data.username;
+            profileRole.textContent = data.role;
+            profileRole.className = `user-role ${data.role}`;
+
+            if (data.role === 'admin') {
+                // If user is admin, reveal all admin-only elements
+                document.querySelectorAll('.hidden-by-role').forEach(el => {
+                    el.classList.remove('hidden-by-role');
+                });
+                await refreshUserList(); // Fetch users for the admin panel
             } else {
-                 elementsToToggle.forEach(el => el.classList.remove('hidden-by-role'));
+                // For regular users, hide upload, file actions, and settings
+                const uploadControls = document.getElementById('upload-controls');
+                const fileActionControls = document.getElementById('file-action-controls');
+                const chatSettingsSection = document.getElementById('chat-settings-section');
+
+                if (uploadControls) uploadControls.style.display = 'none';
+                if (fileActionControls) fileActionControls.style.display = 'none';
+                if (chatSettingsSection) chatSettingsSection.style.display = 'none';
             }
         } catch (error) {
-            console.error('Error fetching user role:', error);
-            document.querySelectorAll('#file-management-section, #chat-settings-section')
-                .forEach(el => el.classList.add('hidden-by-role'));
+            console.error('Error fetching user info:', error);
+            // On error, hide sensitive controls as a security precaution
+            const uploadControls = document.getElementById('upload-controls');
+            const fileActionControls = document.getElementById('file-action-controls');
+            const chatSettingsSection = document.getElementById('chat-settings-section');
+            if (uploadControls) uploadControls.style.display = 'none';
+            if (fileActionControls) fileActionControls.style.display = 'none';
+            if (chatSettingsSection) chatSettingsSection.style.display = 'none';
         }
     }
 
@@ -458,6 +493,63 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Admin Panel Functions ---
+    async function refreshUserList() {
+        try {
+            const response = await fetch('/api/admin/users');
+            if (!response.ok) {
+                throw new Error(`Failed to fetch users: ${response.statusText}`);
+            }
+            const users = await response.json();
+            userList.innerHTML = ''; // Clear existing list
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${user.username}</span>
+                    <span class="user-role ${user.role}">${user.role}</span>
+                `;
+                userList.appendChild(li);
+            });
+        } catch (error) {
+            console.error('Error refreshing user list:', error);
+            showStatus('Could not load user list', 'error', createUserStatus);
+        }
+    }
+
+    async function handleCreateUser(event) {
+        event.preventDefault();
+        const username = newUsernameInput.value.trim();
+        const password = newPasswordInput.value.trim();
+        const role = newUserRoleSelect.value;
+
+        if (!username || !password) {
+            showStatus('Username and password are required.', 'error', createUserStatus);
+            return;
+        }
+
+        try {
+            showStatus('Creating user...', 'loading', createUserStatus);
+            const response = await fetch('/api/admin/create-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, role }),
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showStatus(result.message, 'success', createUserStatus);
+                createUserForm.reset();
+                await refreshUserList();
+            } else {
+                throw new Error(result.detail || 'Failed to create user.');
+            }
+        } catch (error) {
+            console.error('Error creating user:', error);
+            showStatus(error.message, 'error', createUserStatus);
+        }
+    }
+
     // --- Event Listeners ---
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
@@ -468,8 +560,37 @@ document.addEventListener('DOMContentLoaded', () => {
     deleteSelectedBtn.addEventListener('click', deleteSelected);
     newChatBtn.addEventListener('click', startNewChat);
     clearBtn.addEventListener('click', () => clearChat(true));
-    logoutBtn.addEventListener('click', () => { window.location.href = '/logout'; });
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
+    if(createUserForm) {
+        createUserForm.addEventListener('submit', handleCreateUser);
+    }
+    
+    profileBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        profileDropdown.classList.toggle('show');
+    });
+
+    adminPanelLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        adminModal.classList.remove('hidden');
+        profileDropdown.classList.remove('show');
+    });
+
+    adminModalCloseBtn.addEventListener('click', () => {
+        adminModal.classList.add('hidden');
+    });
+
+    adminModal.addEventListener('click', (e) => {
+        if (e.target === adminModal) {
+            adminModal.classList.add('hidden');
+        }
+    });
+    
+    window.addEventListener('click', (e) => {
+        if (!profileDropdown.contains(e.target) && !profileBtn.contains(e.target)) {
+            profileDropdown.classList.remove('show');
+        }
+    });
 
     // --- Initialization ---
     manageTheme();
@@ -477,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshFileList();
     autoResizeTextarea(chatInput);
     chatInput.focus();
-    fetchUserRole();
+    fetchUserInfo(); // Changed from fetchUserRole
     setupSessionTimeout();
     loadInitialChat();
 });
