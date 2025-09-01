@@ -111,14 +111,13 @@ async def chat(
 
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
-
-    # Save the user's message before generating a response
-    if user_id:
-        save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
-
     sanitized_content = last_message.content.replace("{", "{{").replace("}", "}}")
     
     if chat_body.mode == Modes.SEARCH_MODE:
+        # For search mode, save user message and assistant message together
+        if user_id:
+            save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
+
         n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
         relevant_chunks = chunks_service.retrieve_relevant(text=sanitized_content, limit=n_chunks, prev_next_chunks=0)
         
@@ -136,11 +135,7 @@ async def chat(
             for index, source in enumerate(sources_data, start=1)
         )
         
-        # Save the generated search response to the database
         if user_id:
-            # Crucially, we pass `is_new_chat=False` here. The user's message has already
-            # created the chat session with its name. This simply adds the assistant's
-            # reply to that *existing* session.
             save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
         
         async def search_stream_generator():
@@ -152,44 +147,48 @@ async def chat(
         return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
 
     # RAG Mode
-    messages[-1] = ChatMessage(role=last_message.role, content=sanitized_content)
-
-    completion_gen = ui._chat_service.stream_chat(
-        messages=messages,
-        use_context=True,
-        context_filter=chat_body.context_filter,
-    )
-
-    async def stream_generator():
-        full_response = ""
-        if is_new_chat:
-            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-            
-        for delta in completion_gen.response:
-            text_delta = delta if isinstance(delta, str) else delta.delta
-            full_response += text_delta
-            yield f"data: {json.dumps({'delta': text_delta})}\n\n"
-            await asyncio.sleep(0.02)
-        
+    else:
         if user_id:
-            save_chat_message(user_id, session_id, 'assistant', full_response, False)
-        
-        if completion_gen.sources:
-            sources_data = [
-                {
-                    "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
-                    "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
-                    "text": chunk.text,
-                }
-                for chunk in completion_gen.sources
-            ]
-            yield f"data: {json.dumps({'sources': sources_data})}\n\n"
+            save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
+            
+        messages[-1] = ChatMessage(role=last_message.role, content=sanitized_content)
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+        completion_gen = ui._chat_service.stream_chat(
+            messages=messages,
+            use_context=True,
+            context_filter=chat_body.context_filter,
+        )
+
+        async def stream_generator():
+            full_response = ""
+            if is_new_chat:
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+                
+            for delta in completion_gen.response:
+                text_delta = delta if isinstance(delta, str) else delta.delta
+                full_response += text_delta
+                yield f"data: {json.dumps({'delta': text_delta})}\n\n"
+                await asyncio.sleep(0.02)
+            
+            if user_id:
+                save_chat_message(user_id, session_id, 'assistant', full_response, False)
+            
+            if completion_gen.sources:
+                sources_data = [
+                    {
+                        "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
+                        "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
+                        "text": chunk.text,
+                    }
+                    for chunk in completion_gen.sources
+                ]
+                yield f"data: {json.dumps({'sources': sources_data})}\n\n"
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 # --- File Management ---
 
-@api_router.post("/upload")
+@api_router.post("/upload", dependencies=[Depends(require_admin)])
 async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" = Depends(get_ui)):
     temp_paths = []
     ingest_data = []
@@ -225,14 +224,14 @@ def list_ingested_files(ui: "PrivateGptUi" = Depends(get_ui)):
             files.add(ingested_document.doc_metadata.get("file_name", "[FILE NAME MISSING]"))
     return JSONResponse(content=[[row] for row in sorted(list(files))])
 
-@api_router.delete("/files/{file_name}")
+@api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
 def delete_selected_file(file_name: str, ui: "PrivateGptUi" = Depends(get_ui)):
     for doc in ui._ingest_service.list_ingested():
         if doc.doc_metadata and doc.doc_metadata.get("file_name") == file_name:
             ui._ingest_service.delete(doc.doc_id)
     return {"message": f"File '{file_name}' deleted successfully"}
 
-@api_router.delete("/files")
+@api_router.delete("/files", dependencies=[Depends(require_admin)])
 def delete_all_files(ui: "PrivateGptUi" = Depends(get_ui)):
     ingested_files = ui._ingest_service.list_ingested()
     for doc in ingested_files:
