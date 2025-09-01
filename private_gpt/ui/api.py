@@ -246,7 +246,7 @@ class UserUpdateBody(BaseModel):
     email: str | None = None
     new_password: str | None = None
 
-@api_router.post("/user/update", dependencies=[Depends(require_admin)])
+@api_router.post("/user/update")
 async def handle_update_user(request: Request, body: UserUpdateBody):
     user_id = request.session.get("user_id")
     if not user_id:

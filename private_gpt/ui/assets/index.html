@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NEC GPT - AI-Powered Document Chat</title>
+    <meta name="description" content="Intelligent chatbot for document analysis and conversation. Upload files and get AI-powered insights with NEC GPT." />
+    <meta name="author" content="NEC GPT" />
+    <meta name="keywords" content="AI chatbot, document analysis, file upload, artificial intelligence, NEC GPT" />
+
+    <meta property="og:title" content="NEC GPT - AI-Powered Document Chat" />
+    <meta property="og:description" content="Intelligent chatbot for document analysis and conversation. Upload files and get AI-powered insights." />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NEC GPT - AI-Powered Document Chat" />
+    <meta name="twitter:description" content="Intelligent chatbot for document analysis and conversation" />
+    
+    <link rel="canonical" href="/" />
+    <!-- Corrected path to include /assets/ -->
     <link rel="stylesheet" href="/assets/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,16 +37,16 @@
             </button>
             <div id="profile-dropdown" class="profile-dropdown">
                 <div class="profile-details">
-                    <strong>Welcome, <span id="profile-display-name">User</span></strong>
+                    <strong>Welcome, <span id="profile-username">User</span></strong>
                     <span id="profile-role" class="user-role">user</span>
                 </div>
-                <a href="#" id="profile-settings-link" class="dropdown-item">
-                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg>
-                    Profile Settings
-                </a>
                 <a href="#" id="admin-panel-link" class="dropdown-item hidden-by-role">
                     <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
                     Admin Panel
+                </a>
+                <a href="#" id="profile-settings-link" class="dropdown-item">
+                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M12,7A3,3 0 0,1 15,10A3,3 0 0,1 12,13A3,3 0 0,1 9,10A3,3 0 0,1 12,7M17.5,17.13C15.83,18.44 13.9,19 12,19C10.1,19 8.17,18.44 6.5,17.13C6.5,16.09 9.42,15 12,15C14.58,15 17.5,16.09 17.5,17.13Z" /></svg>
+                    Profile Settings
                 </a>
                 <a href="/logout" class="dropdown-item">
                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9Z"/></svg>
@@ -62,7 +76,7 @@
                     </svg>
                 </h2>
                 <div class="accordion-content expanded">
-                    <div id="upload-controls">
+                    <div id="upload-controls" class="hidden-by-role">
                         <div class="upload-zone" id="upload-zone">
                             <div class="upload-content">
                                 <div class="upload-icon" id="upload-icon">
@@ -90,7 +104,7 @@
                         </div>
                     </div>
 
-                    <div id="file-action-controls">
+                    <div id="file-action-controls" class="hidden-by-role">
                         <div class="file-section">
                             <h3>Selected File</h3>
                             <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
@@ -134,7 +148,7 @@
 			
 			
             <!-- Chat Settings Section -->
-            <section class="accordion" id="chat-settings-section">
+            <section class="accordion hidden-by-role" id="chat-settings-section">
                 <h2 class="accordion-header" onclick="toggleAccordion(this)">
                     <span>⚙️ Chat Settings</span>
                     <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
@@ -181,6 +195,7 @@
         </main>
     </div>
 
+    <!-- Admin Modal -->
     <div id="admin-modal" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -223,46 +238,37 @@
         </div>
     </div>
 
+    <!-- Profile Settings Modal -->
     <div id="profile-modal" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>👤 Profile Settings</h2>
+                <h2>⚙️ Profile Settings</h2>
                 <button id="profile-modal-close-btn" class="theme-toggle">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="profile-form">
-                    <div class="admin-form-container">
-                        <h3>User Details</h3>
-                        <div class="form-group">
-                            <label for="profile-name">Name (Optional)</label>
-                            <input type="text" id="profile-name" class="textbox" placeholder="Your full name">
-                        </div>
-                        <div class="form-group">
-                            <label for="profile-email">Email (Optional)</label>
-                            <input type="email" id="profile-email" class="textbox" placeholder="your.email@example.com">
-                        </div>
+                <form id="profile-update-form">
+                    <div class="form-group">
+                        <label for="profile-name">Name</label>
+                        <input type="text" id="profile-name" class="textbox">
                     </div>
-                    
-                    <div class="admin-form-container" style="margin-top: 1.5rem;">
-                        <h3>Change Password</h3>
-                        <p class="form-hint">Leave fields blank to keep your current password.</p>
-                        <div class="form-group">
-                            <label for="profile-new-password">New Password</label>
-                            <input type="password" id="profile-new-password" class="textbox">
-                        </div>
-                        <div class="form-group">
-                            <label for="profile-confirm-password">Confirm New Password</label>
-                            <input type="password" id="profile-confirm-password" class="textbox">
-                        </div>
+                    <div class="form-group">
+                        <label for="profile-email">Email</label>
+                        <input type="email" id="profile-email" class="textbox">
                     </div>
-                    
-                    <button type="submit" id="save-profile-btn" class="icon-button" style="width: 100%; background: var(--primary); color: var(--primary-foreground); margin-top: 1.5rem;">Save Changes</button>
+                    <hr style="border: none; border-top: 1px solid var(--border); margin: 1rem 0;">
+                    <div class="form-group">
+                        <label for="profile-new-password">New Password</label>
+                        <input type="password" id="profile-new-password" class="textbox">
+                        <p class="form-hint">Leave blank to keep current password</p>
+                    </div>
+                    <button type="submit" id="update-profile-btn" class="icon-button" style="width: 100%; background: var(--primary); color: var(--primary-foreground); margin-top: 1rem;">Update Profile</button>
                 </form>
-                <div id="profile-status" class="upload-status" style="margin-top: 0.5rem;"></div>
+                <div id="update-profile-status" class="upload-status" style="margin-top: 0.5rem;"></div>
             </div>
         </div>
     </div>
 
+    <!-- Corrected path to include /assets/ -->
     <script src="/assets/script.js"></script>
 </body>
 </html>

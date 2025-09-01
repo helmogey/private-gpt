@@ -29,26 +29,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Profile & Admin Modal Elements
     const profileBtn = document.getElementById('profile-btn');
     const profileDropdown = document.getElementById('profile-dropdown');
-    const profileDisplayName = document.getElementById('profile-display-name');
     const profileUsername = document.getElementById('profile-username');
     const profileRole = document.getElementById('profile-role');
     const adminPanelLink = document.getElementById('admin-panel-link');
     const adminModal = document.getElementById('admin-modal');
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
 
-
-	// --- EDIT START: Add Profile Settings Modal elements ---
-	const profileSettingsLink = document.getElementById('profile-settings-link');
+    // Profile Settings Modal Elements
+    const profileSettingsLink = document.getElementById('profile-settings-link');
     const profileModal = document.getElementById('profile-modal');
     const profileModalCloseBtn = document.getElementById('profile-modal-close-btn');
-    const profileForm = document.getElementById('profile-form');
+    const profileUpdateForm = document.getElementById('profile-update-form');
     const profileNameInput = document.getElementById('profile-name');
     const profileEmailInput = document.getElementById('profile-email');
     const profileNewPasswordInput = document.getElementById('profile-new-password');
-    const profileConfirmPasswordInput = document.getElementById('profile-confirm-password');
-    const saveProfileBtn = document.getElementById('save-profile-btn');
-    const profileStatus = document.getElementById('profile-status');
-    
+    const updateProfileStatus = document.getElementById('update-profile-status');
+
+
     // --- State Variables ---
     let chatHistory = [];
     let selectedFile = null;
@@ -58,8 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let isTyping = false;
     let inactivityTimerId = null; 
     let maxSessionAge = 0; 
-    let currentUser = null; // --- EDIT: Add a variable to store current user info ---
-    
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
@@ -174,7 +169,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     appendMessage(sender, msg.content);
                 });
             }
-        } catch (error) {
+        } catch (error)
+        {
             console.error('Error fetching history for session:', sessionId, error);
             showStatus('Could not load chat history.', 'error');
         }
@@ -197,7 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
             chatHistory = [];
         }
 
-        // Pause the session inactivity timer while the model is thinking.
         clearTimeout(inactivityTimerId);
 
         appendMessage('user', message);
@@ -241,8 +236,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         try {
                             const parsed = JSON.parse(dataPart);
                             if (parsed.delta) {
-                                // FIX: On the first response chunk, remove the typing indicator
-                                // and create the message bubble. This prevents duplicate bubbles.
                                 if (!botMessageElement) {
                                     hideTypingIndicator();
                                     botMessageElement = appendMessage('bot', '');
@@ -283,7 +276,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Chat error:', error);
             showStatus('Failed to send message', 'error');
         } finally {
-            // This block ensures cleanup happens regardless of success or error.
             hideTypingIndicator();
             setButtonLoading(sendBtn, false);
             resetSessionTimeout();
@@ -340,7 +332,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUploadProgress(0);
         const formData = new FormData();
         
-        // Loop through all selected files and append them to FormData
         for (let i = 0; i < files.length; i++) {
             formData.append('files', files[i]);
         }
@@ -364,26 +355,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     refreshFileList();
                 }, 500);
             } else { 
-                // Enhanced error handling for non-JSON responses
                 let errorText = 'Upload failed: Unable to get server error details.';
                 try {
-                    // Try to parse as JSON first, as that's the expected format for FastAPI errors
                     const errorResult = await response.json();
                     errorText = errorResult.detail || JSON.stringify(errorResult);
                 } catch (e) {
-                    // If JSON parsing fails, the response is likely plain text or HTML (e.g., a server crash page)
                     errorText = await response.text();
                 }
                 throw new Error(errorText);
             }
         } catch (error) {
             updateUploadProgress(0);
-            // Display the more specific error message from the catch block
             showStatus(error.message, 'error');
             console.error('File upload error:', error);
         } finally {
             isUploading = false;
-            uploadInput.value = ''; // Clear input to allow re-uploading same files
+            uploadInput.value = '';
         }
     }
 
@@ -452,155 +439,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Failed to fetch user info.');
             const data = await response.json();
             
-            // Update profile dropdown
-            profileDisplayName.textContent = data.name || data.username; // Use name if available
+            profileUsername.textContent = data.username;
             profileRole.textContent = data.role;
             profileRole.className = `user-role ${data.role}`;
 
-            // Pre-fill profile modal
             profileNameInput.value = data.name || '';
             profileEmailInput.value = data.email || '';
-
-            if (data.role === 'admin') {
-                // If user is admin, reveal all admin-only elements
-                document.querySelectorAll('.hidden-by-role').forEach(el => {
-                    el.classList.remove('hidden-by-role');
-                });
-                await refreshUserList(); // Fetch users for the admin panel
-            } else {
-                // For regular users, hide upload, file actions, and settings
-                const uploadControls = document.getElementById('upload-controls');
-                const fileActionControls = document.getElementById('file-action-controls');
-                const chatSettingsSection = document.getElementById('chat-settings-section');
-
-                if (uploadControls) uploadControls.style.display = 'none';
-                if (fileActionControls) fileActionControls.style.display = 'none';
-                if (chatSettingsSection) chatSettingsSection.style.display = 'none';
-            }
-        } catch (error) {
-            console.error('Error fetching user info:', error);
-            // On error, hide sensitive controls as a security precaution
-            const uploadControls = document.getElementById('upload-controls');
-            const fileActionControls = document.getElementById('file-action-controls');
-            const chatSettingsSection = document.getElementById('chat-settings-section');
-            if (uploadControls) uploadControls.style.display = 'none';
-            if (fileActionControls) fileActionControls.style.display = 'none';
-            if (chatSettingsSection) chatSettingsSection.style.display = 'none';
-        }
-    }
-
-
-	
-	async function fetchUserInfo() {
-        try {
-            const response = await fetch('/api/user/info');
-            if (!response.ok) throw new Error('Failed to fetch user info.');
-            const data = await response.json();
-            currentUser = data; // --- EDIT: Store user data ---
-            
-            // --- EDIT START: Update UI with new user data ---
-            profileDisplayName.textContent = data.name || data.username; // Use name if available
-            profileRole.textContent = data.role;
-            profileRole.className = `user-role ${data.role}`;
-
-            // Pre-fill profile modal
-            profileNameInput.value = data.name || '';
-            profileEmailInput.value = data.email || '';
-            // --- EDIT END ---
 
             if (data.role === 'admin') {
                 document.querySelectorAll('.hidden-by-role').forEach(el => {
                     el.classList.remove('hidden-by-role');
                 });
                 await refreshUserList();
-            } else {
-                // Hiding logic for non-admin users (remains the same)
             }
         } catch (error) {
             console.error('Error fetching user info:', error);
-            // Error handling logic (remains the same)
         }
     }
 
-    // --- EDIT START: Add function to handle profile updates ---
-    async function handleUpdateProfile(event) {
-        event.preventDefault();
-        setButtonLoading(saveProfileBtn, true);
-
-        const name = profileNameInput.value.trim();
-        const email = profileEmailInput.value.trim();
-        const newPassword = profileNewPasswordInput.value;
-        const confirmPassword = profileConfirmPasswordInput.value;
-
-        let detailsChanged = (name !== (currentUser.name || '')) || (email !== (currentUser.email || ''));
-        let passwordChanged = newPassword !== '';
-        
-        if (!detailsChanged && !passwordChanged) {
-            showStatus('No changes to save.', 'info', profileStatus);
-            setButtonLoading(saveProfileBtn, false);
-            return;
-        }
-
-        const promises = [];
-
-        // 1. Handle Password Change
-        if (passwordChanged) {
-            if (newPassword.length < 4) {
-                showStatus('Password must be at least 4 characters.', 'error', profileStatus);
-                setButtonLoading(saveProfileBtn, false);
-                return;
-            }
-            if (newPassword !== confirmPassword) {
-                showStatus('Passwords do not match.', 'error', profileStatus);
-                setButtonLoading(saveProfileBtn, false);
-                return;
-            }
-            promises.push(fetch('/api/user/password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ new_password: newPassword }),
-            }));
-        }
-
-        // 2. Handle Details Change
-        if (detailsChanged) {
-            promises.push(fetch('/api/user/details', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email }),
-            }));
-        }
-
-        try {
-            showStatus('Saving...', 'loading', profileStatus);
-            const responses = await Promise.all(promises);
-
-            // Check if any response was not OK
-            for (const res of responses) {
-                if (!res.ok) {
-                    const errorData = await res.json();
-                    throw new Error(errorData.detail || 'An unknown error occurred.');
-                }
-            }
-            
-            showStatus('Profile updated successfully!', 'success', profileStatus);
-            await fetchUserInfo(); // Refresh user info in the UI
-            profileNewPasswordInput.value = '';
-            profileConfirmPasswordInput.value = '';
-            
-            setTimeout(() => {
-                profileModal.classList.add('hidden');
-            }, 1500);
-
-        } catch (error) {
-            console.error('Error updating profile:', error);
-            showStatus(error.message, 'error', profileStatus);
-        } finally {
-            setButtonLoading(saveProfileBtn, false);
-        }
-    }
-	
-	
     // --- Session Management & Init ---
     function resetSessionTimeout() {
         clearTimeout(inactivityTimerId);
@@ -647,7 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Admin Panel Functions ---
+    // --- Admin & Profile Panel Functions ---
     async function refreshUserList() {
         try {
             const response = await fetch('/api/admin/users');
@@ -655,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`Failed to fetch users: ${response.statusText}`);
             }
             const users = await response.json();
-            userList.innerHTML = ''; // Clear existing list
+            userList.innerHTML = '';
             users.forEach(user => {
                 const li = document.createElement('li');
                 li.innerHTML = `
@@ -704,6 +560,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function handleProfileUpdate(event) {
+        event.preventDefault();
+        const name = profileNameInput.value.trim();
+        const email = profileEmailInput.value.trim();
+        const new_password = profileNewPasswordInput.value;
+
+        const body = { name, email };
+        if (new_password) {
+            body.new_password = new_password;
+        }
+
+        try {
+            showStatus('Updating profile...', 'loading', updateProfileStatus);
+            const response = await fetch('/api/user/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showStatus(result.message, 'success', updateProfileStatus);
+                profileNewPasswordInput.value = ''; // Clear password field
+                setTimeout(() => {
+                    profileModal.classList.add('hidden');
+                }, 1500);
+            } else {
+                throw new Error(result.detail || 'Failed to update profile.');
+            }
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            showStatus(error.message, 'error', updateProfileStatus);
+        }
+    }
+
     // --- Event Listeners ---
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
@@ -715,8 +607,12 @@ document.addEventListener('DOMContentLoaded', () => {
     newChatBtn.addEventListener('click', startNewChat);
     clearBtn.addEventListener('click', () => clearChat(true));
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
-    if(createUserForm) {
+    
+    if (createUserForm) {
         createUserForm.addEventListener('submit', handleCreateUser);
+    }
+    if (profileUpdateForm) {
+        profileUpdateForm.addEventListener('submit', handleProfileUpdate);
     }
     
     profileBtn.addEventListener('click', (e) => {
@@ -730,41 +626,26 @@ document.addEventListener('DOMContentLoaded', () => {
         profileDropdown.classList.remove('show');
     });
 
-    adminModalCloseBtn.addEventListener('click', () => {
-        adminModal.classList.add('hidden');
+    profileSettingsLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        profileModal.classList.remove('hidden');
+        profileDropdown.classList.remove('show');
     });
-
-    adminModal.addEventListener('click', (e) => {
-        if (e.target === adminModal) {
-            adminModal.classList.add('hidden');
-        }
-    });
+    
+    function closeModalOnClickOutside(modal, closeBtn) {
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+    }
+    closeModalOnClickOutside(adminModal, adminModalCloseBtn);
+    closeModalOnClickOutside(profileModal, profileModalCloseBtn);
     
     window.addEventListener('click', (e) => {
         if (!profileDropdown.contains(e.target) && !profileBtn.contains(e.target)) {
             profileDropdown.classList.remove('show');
         }
     });
-    
-    
-    profileSettingsLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        profileModal.classList.remove('hidden');
-        profileDropdown.classList.remove('show'); // Close dropdown
-    });
-
-    profileModalCloseBtn.addEventListener('click', () => {
-        profileModal.classList.add('hidden');
-    });
-
-    profileModal.addEventListener('click', (e) => {
-        if (e.target === profileModal) {
-            profileModal.classList.add('hidden');
-        }
-    });
-
-    profileForm.addEventListener('submit', handleUpdateProfile);
-    
 
     // --- Initialization ---
     manageTheme();
@@ -772,7 +653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshFileList();
     autoResizeTextarea(chatInput);
     chatInput.focus();
-    fetchUserInfo(); // Changed from fetchUserRole
+    fetchUserInfo();
     setupSessionTimeout();
     loadInitialChat();
 });
