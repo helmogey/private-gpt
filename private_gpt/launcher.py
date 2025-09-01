@@ -99,6 +99,7 @@ def create_app(root_injector: Injector) -> FastAPI:
             request.session["user_id"] = db_user['id'] # Store user ID for logging
             request.session["username"] = db_user['username']
             request.session["user_role"] = db_user['role']
+            request.session["user_name"] = db_user['name'] 
             return RedirectResponse(url="/", status_code=303)
         else:
             # If no user is found or password mismatch, return an error
@@ -148,15 +149,22 @@ def create_app(root_injector: Injector) -> FastAPI:
 
     @app.get("/api/user/info", tags=["UI"])
     async def get_user_info(request: Request):
-        """
-        Returns the role and username of the logged-in user.
-        """
         if not request.session.get("logged_in"):
             return JSONResponse(content={"error": "Not authenticated"}, status_code=401)
             
-        role = request.session.get("user_role", "user")
-        username = request.session.get("username", "User")
-        return JSONResponse(content={"role": role, "username": username})
+        # Re-fetch user from DB to get the latest info
+        db_user = get_user(request.session.get("username"))
+        if not db_user:
+            # This case might happen if user was deleted while logged in
+            request.session.clear()
+            return JSONResponse(content={"error": "User not found"}, status_code=401)
+
+        return JSONResponse(content={
+            "username": db_user['username'],
+            "role": db_user['role'],
+            "name": db_user['name'],
+            "email": db_user['email']
+        })
 
 
 ################################################################################################

@@ -7,11 +7,9 @@ from enum import Enum
 from datetime import datetime
 from uuid import uuid4
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
-from fastapi import APIRouter, Depends, Request, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from llama_index.core.llms import ChatMessage, MessageRole
 from pydantic import BaseModel
-from fastapi.responses import StreamingResponse, JSONResponse
 
 from private_gpt.database import (
     save_chat_message, 
@@ -19,14 +17,12 @@ from private_gpt.database import (
     get_chat_history_by_session,
     create_user,
     get_all_users,
-    get_user
+    get_user,
+    update_user_details,
+    update_user_password,
 )
-
-from private_gpt.database import save_chat_message, get_all_chat_sessions, get_chat_history_by_session
 from private_gpt.di import global_injector
-from private_gpt.server.chat.chat_service import ChatService, CompletionGen
-from private_gpt.server.chunks.chunks_service import Chunk, ChunksService
-from private_gpt.server.ingest.ingest_service import IngestService
+from private_gpt.server.chunks.chunks_service import ChunksService
 from private_gpt.settings.settings import settings
 
 class Modes(str, Enum):
@@ -49,15 +45,38 @@ class ChatBody(BaseModel):
     context_filter: dict | None = None
     session_id: str | None = None
 
-
-
 async def require_admin(request: Request):
     """Dependency to check if the user has an 'admin' role."""
     if request.session.get("user_role") != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Requires admin privileges")
     return True
 
-# --- API Endpoints ---
+# --- User Session & Info ---
+
+@api_router.get("/session/expiry")
+def get_session_expiry(request: Request):
+    max_age = request.app.state.session_max_age
+    return JSONResponse(content={"max_age": max_age if request.session.get("logged_in") else 0})
+
+@api_router.get("/user/info")
+def get_user_info(request: Request):
+    if not request.session.get("logged_in"):
+        return JSONResponse(content={"error": "Not authenticated"}, status_code=401)
+    
+    username = request.session.get("username", "user")
+    db_user = get_user(username)
+
+    if not db_user:
+        return JSONResponse(content={"error": "User not found"}, status_code=404)
+
+    return JSONResponse(content={
+        "username": db_user['username'],
+        "role": db_user['role'],
+        "name": db_user['name'],
+        "email": db_user['email'],
+    })
+
+# --- Chat Endpoints ---
 
 @api_router.get("/chats")
 async def get_chats(request: Request):
@@ -74,7 +93,6 @@ async def get_history_by_session(session_id: str, request: Request):
         return JSONResponse(content={"error": "User not authenticated"}, status_code=401)
     history_data = get_chat_history_by_session(user_id, session_id)
     return JSONResponse(content={"history": history_data["messages"]})
-
 
 @api_router.post("/chat")
 async def chat(
@@ -94,12 +112,9 @@ async def chat(
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
 
-    if user_id and chat_body.mode == Modes.RAG_MODE:
+    # Save the user's message before generating a response
+    if user_id:
         save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
-    elif user_id and chat_body.mode == Modes.SEARCH_MODE and is_new_chat:
-        # For Search mode, we only save one message to create the session.
-        save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
-
 
     sanitized_content = last_message.content.replace("{", "{{").replace("}", "}}")
     
@@ -121,13 +136,22 @@ async def chat(
             for index, source in enumerate(sources_data, start=1)
         )
         
+        # Save the generated search response to the database
+        if user_id:
+            # Crucially, we pass `is_new_chat=False` here. The user's message has already
+            # created the chat session with its name. This simply adds the assistant's
+            # reply to that *existing* session.
+            save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
+        
         async def search_stream_generator():
             if is_new_chat:
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
             yield f"data: {json.dumps({'delta': search_response_text})}\n\n"
+            yield f"data: {json.dumps({'sources': sources_data})}\n\n"
 
         return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
 
+    # RAG Mode
     messages[-1] = ChatMessage(role=last_message.role, content=sanitized_content)
 
     completion_gen = ui._chat_service.stream_chat(
@@ -163,6 +187,7 @@ async def chat(
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
+# --- File Management ---
 
 @api_router.post("/upload")
 async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" = Depends(get_ui)):
@@ -186,7 +211,6 @@ async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" =
             ui._ingest_service.bulk_ingest(ingest_data)
             
     finally:
-        # Clean up all temporary files
         for path in temp_paths:
             if path.exists():
                 path.unlink()
@@ -215,12 +239,30 @@ def delete_all_files(ui: "PrivateGptUi" = Depends(get_ui)):
         ui._ingest_service.delete(doc.doc_id)
     return {"message": "All files deleted successfully"}
 
+# --- Admin & Profile Endpoints ---
 
-# --- Admin Endpoints ---
+class UserUpdateBody(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    new_password: str | None = None
+
+@api_router.post("/user/update", dependencies=[Depends(require_admin)])
+async def handle_update_user(request: Request, body: UserUpdateBody):
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
+    try:
+        update_user_details(user_id, body.name, body.email)
+        if body.new_password:
+            update_user_password(user_id, body.new_password)
+        return JSONResponse(content={"message": "Profile updated successfully."}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error updating user: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while updating profile.")
 
 @api_router.get("/admin/users", dependencies=[Depends(require_admin)])
 async def list_users():
-    """Lists all users. Admin only."""
     users = get_all_users()
     return JSONResponse(content=users)
 
@@ -231,7 +273,6 @@ class CreateUserBody(BaseModel):
 
 @api_router.post("/admin/create-user", dependencies=[Depends(require_admin)])
 async def handle_create_user(body: CreateUserBody):
-    """Creates a new user. Admin only."""
     if get_user(body.username):
         raise HTTPException(status_code=400, detail="Username already exists")
     if body.role not in ['admin', 'user']:
@@ -243,6 +284,4 @@ async def handle_create_user(body: CreateUserBody):
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while creating user.")
-    
-
 

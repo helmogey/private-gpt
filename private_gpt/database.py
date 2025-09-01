@@ -16,62 +16,72 @@ def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
-
 def init_db():
-    """Initializes the database and creates tables if they don't exist."""
+    """Initializes the database using atomic, idempotent operations."""
     DB_FOLDER.mkdir(parents=True, exist_ok=True)
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        
-        # Check if users table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users';")
-        if cursor.fetchone() is None:
-            # Create users table
-            cursor.execute("""
-                CREATE TABLE users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    hashed_password TEXT NOT NULL,
-                    role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
-            create_user('admin', 'admin', 'admin') # Create default admin
-            logger.info("Table 'users' created and default admin added.")
 
-        # Check if chat_history table exists
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history';")
-        if cursor.fetchone() is None:
-            cursor.execute("""
-                CREATE TABLE chat_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    session_id TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    session_name TEXT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
-                );
-            """)
-            logger.info("Table 'chat_history' created.")
+        # Create users table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                hashed_password TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                name TEXT,
+                email TEXT
+            );
+        """)
 
-        # Add session_name column if it doesn't exist (for backward compatibility)
-        cursor.execute("PRAGMA table_info(chat_history)")
+        # Add columns for backward compatibility if they don't exist
+        cursor.execute("PRAGMA table_info(users)")
         columns = [column['name'] for column in cursor.fetchall()]
-        if 'session_name' not in columns:
-            cursor.execute("ALTER TABLE chat_history ADD COLUMN session_name TEXT;")
-            logger.info("Column 'session_name' added to 'chat_history' table.")
+        if 'name' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN name TEXT;")
+            logger.info("Column 'name' added to 'users' table.")
+        if 'email' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN email TEXT;")
+            logger.info("Column 'email' added to 'users' table.")
 
+        # Create chat_history table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                session_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                message TEXT NOT NULL,
+                session_name TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+        """)
+
+        # Check if default admin exists, and if not, create it
+        cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+        if cursor.fetchone() is None:
+            hashed_pass = hash_password('admin')
+            cursor.execute(
+                "INSERT INTO users (username, hashed_password, role, name, email) VALUES (?, ?, ?, ?, ?)",
+                ('admin', hashed_pass, 'admin', '', '')
+            )
+            logger.info("Default admin user created.")
+
+        # Commit all changes at once
         conn.commit()
         
     except sqlite3.Error as e:
         logger.error(f"Database error during initialization: {e}")
+        # Re-raise the exception to prevent the app from starting with a broken DB
+        raise e
     finally:
         if conn:
             conn.close()
 
+            
 # --- Password Utilities ---
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
@@ -89,14 +99,14 @@ def get_user(username: str):
     finally:
         conn.close()
 
-def create_user(username: str, password: str, role: str = 'user'):
+def create_user(username: str, password: str, role: str = 'user', name: str = None, email: str = None):
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         hashed_pass = hash_password(password)
         cursor.execute(
-            "INSERT INTO users (username, hashed_password, role) VALUES (?, ?, ?)",
-            (username, hashed_pass, role)
+            "INSERT INTO users (username, hashed_password, role, name, email) VALUES (?, ?, ?, ?, ?)",
+            (username, hashed_pass, role, name, email)
         )
         conn.commit()
         logger.info(f"User '{username}' created with role '{role}'.")
@@ -105,17 +115,53 @@ def create_user(username: str, password: str, role: str = 'user'):
     finally:
         conn.close()
 
-# +++ START ADDITION +++
+
+
+def update_user_details(user_id: int, name: str, email: str):
+    """Updates a user's name and email."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE users SET name = ?, email = ? WHERE id = ?",
+            (name, email, user_id)
+        )
+        conn.commit()
+        logger.info(f"Updated details for user_id: {user_id}")
+    finally:
+        conn.close()
+
+def update_user_password(user_id: int, new_password: str):
+    """Updates a user's password."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        hashed_pass = hash_password(new_password)
+        cursor.execute(
+            "UPDATE users SET hashed_password = ? WHERE id = ?",
+            (hashed_pass, user_id)
+        )
+        conn.commit()
+        logger.info(f"Updated password for user_id: {user_id}")
+    finally:
+        conn.close()
+
+
+
+
 def get_all_users():
     """Retrieves all users from the database."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        users = cursor.execute("SELECT id, username, role, created_at FROM users ORDER BY created_at DESC").fetchall()
+        # --- EDIT START: Select new name and email columns ---
+        users = cursor.execute("SELECT id, username, role, name, email, created_at FROM users ORDER BY created_at DESC").fetchall()
+        # --- EDIT END ---
         return [dict(row) for row in users]
     finally:
         conn.close()
-# +++ END ADDITION +++
+
+
 
 # --- Chat History Functions ---
 def save_chat_message(user_id: int, session_id: str, role: str, message: str, is_new_chat: bool):

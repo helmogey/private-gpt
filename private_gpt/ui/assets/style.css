@@ -223,6 +223,13 @@ body.dark {
     color: var(--foreground-muted);
 }
 
+/* --- EDIT START: Add hint style --- */
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--foreground-subtle);
+    margin-bottom: 0.75rem;
+}
+
 .user-list-section h3 {
     font-size: 0.875rem;
     font-weight: 600;
