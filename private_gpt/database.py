@@ -123,7 +123,16 @@ def save_chat_message(user_id: int, session_id: str, role: str, message: str, is
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        session_name = " ".join(message.split()[:5]) if is_new_chat else None
+        session_name = None
+        
+        # Only assign a name if it's a new chat.
+        if is_new_chat:
+            # Generate a name from the user's message.
+            # If the message is empty or not from a user, default to "Untitled Chat".
+            if role == 'user' and message.strip():
+                session_name = " ".join(message.split()[:5])
+            else:
+                session_name = "Untitled Chat"
         
         cursor.execute(
             "INSERT INTO chat_history (user_id, session_id, role, message, session_name) VALUES (?, ?, ?, ?, ?)",

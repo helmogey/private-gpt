@@ -94,8 +94,12 @@ async def chat(
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
 
-    if user_id:
+    if user_id and chat_body.mode == Modes.RAG_MODE:
         save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
+    elif user_id and chat_body.mode == Modes.SEARCH_MODE and is_new_chat:
+        # For Search mode, we only save one message to create the session.
+        save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
+
 
     sanitized_content = last_message.content.replace("{", "{{").replace("}", "}}")
     
@@ -116,9 +120,6 @@ async def chat(
             f"{index}. **{source['file']} (page {source['page']})**\n{source['text']}"
             for index, source in enumerate(sources_data, start=1)
         )
-        
-        if user_id:
-            save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
         
         async def search_stream_generator():
             if is_new_chat:
