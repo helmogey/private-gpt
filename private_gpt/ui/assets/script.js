@@ -314,41 +314,64 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteSelectedBtn.disabled = true;
     }
 
-    async function handleFileUpload(files) {
+     async function handleFileUpload(files) {
         if (files.length === 0 || isUploading) return;
         isUploading = true;
-        const file = files[0];
-        showStatus(`Uploading ${file.name}...`, 'loading');
+    
+        const fileCount = files.length;
+        const statusMessage = `Uploading ${fileCount} file${fileCount > 1 ? 's' : ''}...`;
+        showStatus(statusMessage, 'loading');
+        
         updateUploadProgress(0);
         const formData = new FormData();
-        formData.append('file', file);
-
+        
+        // Loop through all selected files and append them to FormData
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+    
         try {
             let progress = 0;
             const interval = setInterval(() => {
                 progress = Math.min(progress + Math.random() * 10, 90);
                 updateUploadProgress(progress);
             }, 500);
-
+    
             const response = await fetch('/api/upload', { method: 'POST', body: formData });
             clearInterval(interval);
             updateUploadProgress(100);
-
+    
             if (response.ok) {
+                const result = await response.json();
                 setTimeout(() => {
-                    showStatus('Upload successful!', 'success');
+                    showStatus(result.message || 'Upload successful!', 'success');
                     updateUploadProgress(0);
                     refreshFileList();
                 }, 500);
-            } else { throw new Error('Upload failed'); }
+            } else { 
+                // Enhanced error handling for non-JSON responses
+                let errorText = 'Upload failed: Unable to get server error details.';
+                try {
+                    // Try to parse as JSON first, as that's the expected format for FastAPI errors
+                    const errorResult = await response.json();
+                    errorText = errorResult.detail || JSON.stringify(errorResult);
+                } catch (e) {
+                    // If JSON parsing fails, the response is likely plain text or HTML (e.g., a server crash page)
+                    errorText = await response.text();
+                }
+                throw new Error(errorText);
+            }
         } catch (error) {
             updateUploadProgress(0);
-            showStatus('Upload failed', 'error');
+            // Display the more specific error message from the catch block
+            showStatus(error.message, 'error');
             console.error('File upload error:', error);
         } finally {
             isUploading = false;
+            uploadInput.value = ''; // Clear input to allow re-uploading same files
         }
     }
+
 
     async function deleteAllFiles() {
         if (!confirm("Are you sure you want to delete ALL ingested files?")) return;

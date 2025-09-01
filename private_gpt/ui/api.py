@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 import asyncio
 import json
 from enum import Enum
@@ -165,17 +165,33 @@ async def chat(
 
 
 @api_router.post("/upload")
-async def upload_file(file: UploadFile = File(...), ui: "PrivateGptUi" = Depends(get_ui)):
-    temp_path = Path("temp_uploads") / file.filename
-    temp_path.parent.mkdir(exist_ok=True)
+async def upload_files(files: List[UploadFile] = File(...), ui: "PrivateGptUi" = Depends(get_ui)):
+    temp_paths = []
+    ingest_data = []
+    
     try:
-        with temp_path.open("wb") as buffer:
-            buffer.write(await file.read())
-        ui._ingest_service.bulk_ingest([(str(file.filename), temp_path)])
+        temp_dir = Path("temp_uploads")
+        temp_dir.mkdir(exist_ok=True)
+
+        for file in files:
+            temp_path = temp_dir / file.filename
+            
+            with temp_path.open("wb") as buffer:
+                buffer.write(await file.read())
+                
+            temp_paths.append(temp_path)
+            ingest_data.append((str(file.filename), temp_path))
+
+        if ingest_data:
+            ui._ingest_service.bulk_ingest(ingest_data)
+            
     finally:
-        if temp_path.exists():
-            temp_path.unlink()
-    return JSONResponse(content={"message": "File uploaded successfully"}, status_code=200)
+        # Clean up all temporary files
+        for path in temp_paths:
+            if path.exists():
+                path.unlink()
+                
+    return JSONResponse(content={"message": f"{len(files)} file(s) uploaded successfully"}, status_code=200)
 
 @api_router.get("/files")
 def list_ingested_files(ui: "PrivateGptUi" = Depends(get_ui)):
