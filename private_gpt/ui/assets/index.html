@@ -103,12 +103,12 @@
                         </div>
                     </div>
 
-                    <div id="file-action-controls" class="hidden-by-role">
-                        <div class="file-section">
-                            <h3>Selected File</h3>
-                            <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
-                        </div>
+                    <div class="file-section">
+                        <h3>Selected File</h3>
+                        <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
+                    </div>
 
+                    <div id="file-action-controls" class="hidden-by-role">
                         <div class="file-actions" id="file-actions-buttons">
                             <button id="deselect-btn" class="icon-button" disabled title="Deselect File">
                                 <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>
@@ -271,6 +271,30 @@
             </div>
         </div>
     </div>
+
+    <!-- Team Tagging Modal -->
+    <div id="tag-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🏷️ Assign Team Tags</h2>
+                <button id="tag-modal-close-btn" class="theme-toggle">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="upload-team-tags">Select Team(s)</label>
+                    <select id="upload-team-tags" class="textbox" multiple style="height: 120px;">
+                        <!-- Team options will be populated by JavaScript -->
+                    </select>
+                    <p class="form-hint">Select one or more teams that can access the uploaded document(s). Use Ctrl+Click (or Cmd+Click on Mac) to select multiple.</p>
+                </div>
+                <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                    <button id="cancel-upload-btn" class="icon-button" style="width: 100%;">Cancel</button>
+                    <button id="confirm-upload-btn" class="icon-button" style="width: 100%; background: var(--primary); color: var(--primary-foreground);">Confirm and Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="/assets/script.js"></script>
 </body>
 </html>

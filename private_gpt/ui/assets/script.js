@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const newUserRoleSelect = document.getElementById('new-user-role');
     const newUserTeamSelect = document.getElementById('new-user-team');
     const createUserStatus = document.getElementById('create-user-status');
+    const uploadTeamTagsSelect = document.getElementById('upload-team-tags');
     const userList = document.getElementById('user-list');
     
     // Profile & Admin Modal Elements
@@ -45,7 +46,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileEmailInput = document.getElementById('profile-email');
     const profileNewPasswordInput = document.getElementById('profile-new-password');
     const profileSettingsStatus = document.getElementById('profile-settings-status');
-
+	
+	
+	// ADDED: References for the new Tag Modal
+    const tagModal = document.getElementById('tag-modal');
+    const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
+    const cancelUploadBtn = document.getElementById('cancel-upload-btn');
+    const confirmUploadBtn = document.getElementById('confirm-upload-btn');
 
     // --- State Variables ---
     let chatHistory = [];
@@ -57,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let inactivityTimerId = null; 
     let maxSessionAge = 0;
     let currentUsername = null; 
+    let filesToUpload = null;
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
@@ -281,6 +289,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- File Management Functions ---
+    
+    async function handleFileSelectionForUpload(files) {
+        if (files.length === 0 || isUploading) return;
+        
+        // Store the files and open the modal
+        filesToUpload = files;
+        tagModal.classList.remove('hidden');
+    }
+    
+    
     async function refreshFileList() {
         try {
             const response = await fetch('/api/files');
@@ -319,20 +337,26 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteSelectedBtn.disabled = true;
     }
 
-     async function handleFileUpload(files) {
-        if (files.length === 0 || isUploading) return;
+     async function handleFileUpload() {
+        if (!filesToUpload || filesToUpload.length === 0 || isUploading) return;
         isUploading = true;
+        
+        // Close the modal
+        tagModal.classList.add('hidden');
     
-        const fileCount = files.length;
+        const fileCount = filesToUpload.length;
         const statusMessage = `Uploading ${fileCount} file${fileCount > 1 ? 's' : ''}...`;
         showStatus(statusMessage, 'loading');
         
         updateUploadProgress(0);
         const formData = new FormData();
         
-        for (let i = 0; i < files.length; i++) {
-            formData.append('files', files[i]);
+        for (let i = 0; i < filesToUpload.length; i++) {
+            formData.append('files', filesToUpload[i]);
         }
+    
+        const selectedTeams = Array.from(uploadTeamTagsSelect.selectedOptions).map(option => option.value);
+        formData.append('teams', JSON.stringify(selectedTeams));
     
         try {
             let progress = 0;
@@ -369,6 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             isUploading = false;
             uploadInput.value = '';
+            filesToUpload = null; // Clear the stored files
         }
     }
 
@@ -416,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
         uploadZone.addEventListener('drop', e => {
             uploadZone.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files);
+            if (e.dataTransfer.files.length > 0) handleFileSelectionForUpload(e.dataTransfer.files);
         });
         uploadZone.addEventListener('click', () => { if (!isUploading) uploadInput.click(); });
     }
@@ -504,21 +529,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Admin Panel Functions ---
     async function populateTeamsDropdown() {
-        if (!newUserTeamSelect) return;
+        const dropdowns = [newUserTeamSelect, uploadTeamTagsSelect].filter(Boolean);
+        if (dropdowns.length === 0) return;
         try {
             const response = await fetch('/api/admin/teams');
             if (!response.ok) throw new Error('Failed to fetch teams');
             const teams = await response.json();
-            newUserTeamSelect.innerHTML = '';
-            teams.forEach(team => {
-                const option = document.createElement('option');
-                option.value = team;
-                option.textContent = team;
-                newUserTeamSelect.appendChild(option);
+            
+            dropdowns.forEach(dropdown => {
+                dropdown.innerHTML = '';
+                teams.forEach(team => {
+                    const option = document.createElement('option');
+                    option.value = team;
+                    option.textContent = team;
+                    dropdown.appendChild(option);
+                });
             });
+
         } catch (error) {
             console.error('Error populating teams dropdown:', error);
-            newUserTeamSelect.innerHTML = '<option value="Default">Default</option>';
+            dropdowns.forEach(dropdown => {
+                dropdown.innerHTML = '<option value="Default">Default</option>';
+            });
         }
     }
 
@@ -660,6 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
     newChatBtn.addEventListener('click', startNewChat);
     clearBtn.addEventListener('click', () => clearChat(true));
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
+    uploadInput.addEventListener('change', e => { if (e.target.files.length > 0) handleFileSelectionForUpload(e.target.files); });
     
     // Modals and Dropdowns
     if (createUserForm) createUserForm.addEventListener('submit', handleCreateUser);
@@ -710,6 +743,24 @@ document.addEventListener('DOMContentLoaded', () => {
             handleDeleteUser(username);
         }
     });
+    
+    
+    confirmUploadBtn.addEventListener('click', handleFileUpload);
+    
+    const closeTagModal = () => {
+        tagModal.classList.add('hidden');
+        uploadInput.value = ''; // Clear the file input to allow re-selection of the same file
+        filesToUpload = null;
+    };
+    
+    tagModalCloseBtn.addEventListener('click', closeTagModal);
+    cancelUploadBtn.addEventListener('click', closeTagModal);
+    tagModal.addEventListener('click', (e) => {
+        if (e.target === tagModal) {
+            closeTagModal();
+        }
+    });
+    
 
     // --- Initialization ---
     manageTheme();

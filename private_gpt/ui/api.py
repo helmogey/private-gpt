@@ -10,8 +10,11 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from llama_index.core.llms import ChatMessage, MessageRole
+from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
 from pydantic import BaseModel
 
+# ADDED: Import the ContextFilter object
+from private_gpt.open_ai.extensions.context_filter import ContextFilter
 from private_gpt.database import (
     save_chat_message, 
     get_all_chat_sessions, 
@@ -22,6 +25,9 @@ from private_gpt.database import (
     update_user_details,
     update_user_password,
     delete_user,
+    add_document_tags,
+    get_files_for_teams,
+    delete_document_tags,
 )
 from private_gpt.di import global_injector
 from private_gpt.server.chat.chat_service import ChatService
@@ -101,6 +107,7 @@ def get_user_info(request: Request):
         "name": db_user['name'],
         "email": db_user['email'],
         "display_name": display_name,
+        "team": db_user['team'],
     })
 
 @api_router.post("/user/update")
@@ -137,17 +144,58 @@ async def get_history_by_session(session_id: str, request: Request):
 
 @api_router.post("/chat")
 async def chat(
-    request: Request, 
+    request: Request,
     chat_body: ChatBody,
     chat_service: ChatService = Depends(get_chat_service),
-    chunks_service: ChunksService = Depends(get_chunks_service)
+    chunks_service: ChunksService = Depends(get_chunks_service),
+    ingest_service: "IngestService" = Depends(get_ingest_service),
 ):
     user_id = request.session.get("user_id")
-    
+    user_team = request.session.get("user_team")
+    user_role = request.session.get("user_role")
+
     session_id = chat_body.session_id
     is_new_chat = not session_id
     if is_new_chat:
         session_id = str(uuid4())
+
+    # --- MODIFIED: Build a proper ContextFilter object using doc_ids ---
+    final_context_filter = None
+    doc_ids_to_filter_by = []
+    
+    # Check if a specific file was selected in the UI. The frontend sends file names in the 'docs_ids' key.
+    selected_filenames = chat_body.context_filter.get("docs_ids") if chat_body.context_filter else None
+
+    if selected_filenames:
+        # User selected a specific file, so we filter by it.
+        # This applies to both admins and regular users.
+        all_ingested_docs = ingest_service.list_ingested()
+        doc_ids_to_filter_by = [
+            doc.doc_id
+            for doc in all_ingested_docs
+            if doc.doc_metadata and doc.doc_metadata.get("file_name") in selected_filenames
+        ]
+    elif user_role != 'admin':
+        # No specific file selected, so apply team-based filtering for non-admins.
+        all_ingested_docs = ingest_service.list_ingested()
+        allowed_files_for_team = get_files_for_teams([user_team]) if user_team else []
+        
+        if allowed_files_for_team:
+            doc_ids_to_filter_by = [
+                doc.doc_id
+                for doc in all_ingested_docs
+                if doc.doc_metadata and doc.doc_metadata.get("file_name") in allowed_files_for_team
+            ]
+
+    # If after all filtering, the list is empty for a non-admin or for a selection,
+    # we must provide a dummy ID to search for nothing.
+    if (selected_filenames or user_role != 'admin') and not doc_ids_to_filter_by:
+        doc_ids_to_filter_by = ["dummy-id-that-will-not-be-found"]
+
+    # Only create a context filter if there are specific doc IDs to filter by.
+    # An admin querying all docs will have an empty list, and final_context_filter will be None.
+    if doc_ids_to_filter_by:
+        final_context_filter = ContextFilter(docs_ids=doc_ids_to_filter_by)
 
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
@@ -160,7 +208,12 @@ async def chat(
     
     if chat_body.mode == Modes.SEARCH_MODE:
         n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
-        relevant_chunks = chunks_service.retrieve_relevant(text=sanitized_content, limit=n_chunks, prev_next_chunks=0)
+        relevant_chunks = chunks_service.retrieve_relevant(
+            text=sanitized_content, 
+            limit=n_chunks, 
+            prev_next_chunks=0,
+            context_filter=final_context_filter 
+        )
         
         sources_data = [
             {
@@ -193,7 +246,7 @@ async def chat(
     completion_gen = chat_service.stream_chat(
         messages=messages,
         use_context=True,
-        context_filter=chat_body.context_filter,
+        context_filter=final_context_filter,
     )
 
     async def stream_generator():
@@ -228,8 +281,14 @@ async def chat(
 @api_router.post("/upload", dependencies=[Depends(require_admin)])
 async def upload_files(
     files: List[UploadFile] = File(...), 
+    teams: str = Form("[]"),
     ingest_service: "IngestService" = Depends(get_ingest_service)
 ):
+    try:
+        teams_list = json.loads(teams)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid format for teams. Must be a JSON array string.")
+
     temp_paths = []
     ingest_data = []
     
@@ -248,35 +307,63 @@ async def upload_files(
 
         if ingest_data:
             ingest_service.bulk_ingest(ingest_data)
+            for file in files:
+                add_document_tags(file.filename, teams_list)
             
     finally:
         for path in temp_paths:
             if path.exists():
                 path.unlink()
                 
-    return JSONResponse(content={"message": f"{len(files)} file(s) uploaded successfully"}, status_code=200)
+    return JSONResponse(content={"message": f"{len(files)} file(s) uploaded and tagged successfully"}, status_code=200)
 
 @api_router.get("/files")
-def list_ingested_files(ingest_service: "IngestService" = Depends(get_ingest_service)):
-    files = set()
-    for ingested_document in ingest_service.list_ingested():
-        if ingested_document.doc_metadata:
-            files.add(ingested_document.doc_metadata.get("file_name", "[FILE NAME MISSING]"))
-    return JSONResponse(content=[[row] for row in sorted(list(files))])
+def list_ingested_files(request: Request, ingest_service: "IngestService" = Depends(get_ingest_service)):
+    user_team = request.session.get("user_team")
+    user_role = request.session.get("user_role")
+
+    ingested_files_in_store = {
+        doc.doc_metadata.get("file_name")
+        for doc in ingest_service.list_ingested()
+        if doc.doc_metadata and doc.doc_metadata.get("file_name")
+    }
+
+    if user_role == 'admin':
+        allowed_files = list(ingested_files_in_store)
+    elif user_team:
+        files_for_team = set(get_files_for_teams([user_team]))
+        allowed_files = list(ingested_files_in_store.intersection(files_for_team))
+    else:
+        allowed_files = []
+
+    return JSONResponse(content=[[row] for row in sorted(allowed_files)])
 
 @api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
 def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
-    for doc in ingest_service.list_ingested():
-        if doc.doc_metadata and doc.doc_metadata.get("file_name") == file_name:
-            ingest_service.delete(doc.doc_id)
-    return {"message": f"File '{file_name}' deleted successfully"}
+    doc_ids_to_delete = [
+        doc.doc_id
+        for doc in ingest_service.list_ingested()
+        if doc.doc_metadata and doc.doc_metadata.get("file_name") == file_name
+    ]
+    
+    if not doc_ids_to_delete:
+        logger.warning(f"File '{file_name}' not found in vector store, but attempting to clear tags.")
+    
+    for doc_id in doc_ids_to_delete:
+        ingest_service.delete(doc_id)
+        
+    delete_document_tags(file_name)
+    
+    return {"message": f"File '{file_name}' and its tags deleted successfully"}
 
 @api_router.delete("/files", dependencies=[Depends(require_admin)])
 def delete_all_files(ingest_service: "IngestService" = Depends(get_ingest_service)):
     ingested_files = ingest_service.list_ingested()
     for doc in ingested_files:
         ingest_service.delete(doc.doc_id)
-    return {"message": "All files deleted successfully"}
+        if doc.doc_metadata and doc.doc_metadata.get("file_name"):
+            delete_document_tags(doc.doc_metadata.get("file_name"))
+    return {"message": "All files and their tags have been deleted successfully"}
 
 # --- Admin Endpoints ---
 
@@ -325,7 +412,6 @@ async def handle_delete_user(username: str, request: Request):
         delete_user(username)
         return JSONResponse(content={"message": f"User '{username}' deleted successfully."}, status_code=200)
     except ValueError as e:
-        # This will catch the "admin cannot be deleted" error
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error deleting user '{username}': {e}")

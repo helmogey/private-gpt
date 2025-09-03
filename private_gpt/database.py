@@ -87,6 +87,21 @@ def init_db():
                     cursor.execute("ALTER TABLE chat_history ADD COLUMN session_name TEXT;")
                     logger.info("Column 'session_name' added to 'chat_history' table.")
             
+
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='document_tags';")
+            if cursor.fetchone() is None:
+                cursor.execute("""
+                    CREATE TABLE document_tags (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        file_name TEXT NOT NULL,
+                        team TEXT NOT NULL,
+                        UNIQUE(file_name, team)
+                    );
+                """)
+                logger.info("Table 'document_tags' created.")
+
+
             cursor.execute("COMMIT;")
         except sqlite3.Error as e:
             cursor.execute("ROLLBACK;")
@@ -238,4 +253,48 @@ def get_chat_history_by_session(user_id: int, session_id: str):
         except Exception as e:
             logger.error(f"Error fetching chat history for session {session_id}: {e}")
             return {"session_id": session_id, "messages": []}
+
+
+
+
+
+def add_document_tags(file_name: str, teams: list[str]):
+    """Adds team tags to a document, replacing any existing ones."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("BEGIN TRANSACTION;")
+        try:
+            # Delete old tags for this file first
+            cursor.execute("DELETE FROM document_tags WHERE file_name = ?", (file_name,))
+            # Insert new tags
+            if teams:
+                tags_to_insert = [(file_name, team) for team in teams]
+                cursor.executemany("INSERT INTO document_tags (file_name, team) VALUES (?, ?)", tags_to_insert)
+            cursor.execute("COMMIT;")
+            logger.info(f"Updated tags for file '{file_name}' to: {teams}")
+        except sqlite3.Error as e:
+            cursor.execute("ROLLBACK;")
+            logger.error(f"Database error adding document tags for {file_name}: {e}")
+            raise
+
+def get_files_for_teams(teams: list[str]) -> list[str]:
+    """Retrieves all unique file names associated with a list of teams."""
+    if not teams:
+        return []
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        placeholders = ','.join('?' for _ in teams)
+        query = f"SELECT DISTINCT file_name FROM document_tags WHERE team IN ({placeholders})"
+        files = cursor.execute(query, teams).fetchall()
+        return [row['file_name'] for row in files]
+
+def delete_document_tags(file_name: str):
+    """Deletes all tags associated with a specific file."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM document_tags WHERE file_name = ?", (file_name,))
+        conn.commit()
+        logger.info(f"Deleted tags for file '{file_name}'.")
+
+
 

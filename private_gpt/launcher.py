@@ -99,7 +99,8 @@ def create_app(root_injector: Injector) -> FastAPI:
             request.session["user_id"] = db_user['id'] # Store user ID for logging
             request.session["username"] = db_user['username']
             request.session["user_role"] = db_user['role']
-            request.session["user_name"] = db_user['name'] 
+            request.session["user_name"] = db_user['name']
+            request.session["user_team"] = db_user['team'] 
             return RedirectResponse(url="/", status_code=303)
         else:
             # If no user is found or password mismatch, return an error
