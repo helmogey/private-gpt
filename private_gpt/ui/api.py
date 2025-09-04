@@ -1,19 +1,17 @@
 import logging
 import os
-from pathlib import Path
-from typing import Any, List
-import asyncio
 import json
+from pathlib import Path
+from typing import List
 from enum import Enum
-from datetime import datetime
 from uuid import uuid4
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from llama_index.core.llms import ChatMessage, MessageRole
-from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
 from pydantic import BaseModel
 
-# ADDED: Import the ContextFilter object
 from private_gpt.open_ai.extensions.context_filter import ContextFilter
 from private_gpt.database import (
     save_chat_message, 
@@ -25,21 +23,29 @@ from private_gpt.database import (
     update_user_details,
     update_user_password,
     delete_user,
-    add_document_tags,
-    get_files_for_teams,
-    delete_document_tags,
+    add_document_teams,
+    get_document_teams,
 )
 from private_gpt.di import global_injector
 from private_gpt.server.chat.chat_service import ChatService
 from private_gpt.server.chunks.chunks_service import ChunksService
 from private_gpt.settings.settings import settings
 
-class Modes(str, Enum):
-    RAG_MODE = "RAG"
-    SEARCH_MODE = "Search"
+# This should match the value in launcher.py
+SESSION_MAX_AGE = 600
 
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
+
+@api_router.get("/app-name")
+def get_app_name():
+    """Provides the application name from environment variables."""
+    app_name = os.getenv("APP_NAME", "DocuMind")
+    return JSONResponse(content={"appName": app_name})
+
+class Modes(str, Enum):
+    RAG_MODE = "RAG"
+    SEARCH_MODE = "Search"
 
 # --- Dependency Injectors ---
 
@@ -85,7 +91,7 @@ class UpdateUserBody(BaseModel):
 @api_router.get("/session/expiry")
 def get_session_expiry(request: Request):
     if request.session.get("logged_in"):
-        return JSONResponse(content={"max_age": settings().server.session_max_age})
+        return JSONResponse(content={"max_age": SESSION_MAX_AGE})
     return JSONResponse(content={"max_age": 0}, status_code=401)
 
 @api_router.get("/user/info")
@@ -107,7 +113,6 @@ def get_user_info(request: Request):
         "name": db_user['name'],
         "email": db_user['email'],
         "display_name": display_name,
-        "team": db_user['team'],
     })
 
 @api_router.post("/user/update")
@@ -141,78 +146,43 @@ async def get_history_by_session(session_id: str, request: Request):
     history_data = get_chat_history_by_session(user_id, session_id)
     return JSONResponse(content={"history": history_data["messages"]})
 
-
 @api_router.post("/chat")
 async def chat(
-    request: Request,
+    request: Request, 
     chat_body: ChatBody,
     chat_service: ChatService = Depends(get_chat_service),
     chunks_service: ChunksService = Depends(get_chunks_service),
-    ingest_service: "IngestService" = Depends(get_ingest_service),
+    ingest_service: "IngestService" = Depends(get_ingest_service)
 ):
     user_id = request.session.get("user_id")
-    user_team = request.session.get("user_team")
     user_role = request.session.get("user_role")
+    user_team = request.session.get("user_team")
 
-    session_id = chat_body.session_id
-    is_new_chat = not session_id
-    if is_new_chat:
-        session_id = str(uuid4())
 
-    # --- MODIFIED: Build a proper ContextFilter object using doc_ids ---
-    final_context_filter = None
-    doc_ids_to_filter_by = []
-    
-    # Check if a specific file was selected in the UI. The frontend sends file names in the 'docs_ids' key.
-    selected_filenames = chat_body.context_filter.get("docs_ids") if chat_body.context_filter else None
-
-    if selected_filenames:
-        # User selected a specific file, so we filter by it.
-        # This applies to both admins and regular users.
-        all_ingested_docs = ingest_service.list_ingested()
-        doc_ids_to_filter_by = [
-            doc.doc_id
-            for doc in all_ingested_docs
-            if doc.doc_metadata and doc.doc_metadata.get("file_name") in selected_filenames
-        ]
-    elif user_role != 'admin':
-        # No specific file selected, so apply team-based filtering for non-admins.
-        all_ingested_docs = ingest_service.list_ingested()
-        allowed_files_for_team = get_files_for_teams([user_team]) if user_team else []
-        
-        if allowed_files_for_team:
-            doc_ids_to_filter_by = [
-                doc.doc_id
-                for doc in all_ingested_docs
-                if doc.doc_metadata and doc.doc_metadata.get("file_name") in allowed_files_for_team
-            ]
-
-    # If after all filtering, the list is empty for a non-admin or for a selection,
-    # we must provide a dummy ID to search for nothing.
-    if (selected_filenames or user_role != 'admin') and not doc_ids_to_filter_by:
-        doc_ids_to_filter_by = ["dummy-id-that-will-not-be-found"]
-
-    # Only create a context filter if there are specific doc IDs to filter by.
-    # An admin querying all docs will have an empty list, and final_context_filter will be None.
-    if doc_ids_to_filter_by:
-        final_context_filter = ContextFilter(docs_ids=doc_ids_to_filter_by)
 
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
-    last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
-    current_day = datetime.now().day
-    processed_message = last_message.content.lower().replace("today's", f"at Day {current_day}").replace("today", f"at Day {current_day}")
-    sanitized_content = processed_message.replace("{", "{{").replace("}", "}}")
-
-    if user_id:
-        save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
     
-    if chat_body.mode == Modes.SEARCH_MODE:
+    l_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
+    current_day = datetime.now().day
+    processed_message = l_message.content.lower().replace("today's", f"at Day {current_day}").replace("today", f"at Day {current_day}")
+    last_message = processed_message.replace("{", "{{").replace("}", "}}")
+    # --- EDITED: ADDED MODE HANDLING ---
+
+
+    # Handle Search Mode for Admins
+    if user_role == 'admin' and chat_body.mode == Modes.SEARCH_MODE:
+        
+        
+        context_filter = None
+        if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
+             context_filter = ContextFilter(docs_ids=chat_body.context_filter.get("docs_ids"))
+
         n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
         relevant_chunks = chunks_service.retrieve_relevant(
-            text=sanitized_content, 
+            text=last_message, 
             limit=n_chunks, 
             prev_next_chunks=0,
-            context_filter=final_context_filter 
+            context_filter=context_filter
         )
         
         sources_data = [
@@ -224,12 +194,18 @@ async def chat(
             for chunk in relevant_chunks
         ]
         
-        search_response_text = "\n\n\n".join(
-            f"{index}. **{source['file']} (page {source['page']})**\n{source['text']}"
-            for index, source in enumerate(sources_data, start=1)
-        )
+        search_response_text = "\n\n---\n\n".join(
+            f"**Source:** {source['file']} (Page {source['page']})\n\n{source['text']}"
+            for source in sources_data
+        ) or "No relevant documents found for your search."
         
+        session_id = chat_body.session_id
+        is_new_chat = not session_id
+        if is_new_chat:
+            session_id = str(uuid4())
+
         if user_id:
+            save_chat_message(user_id, session_id, 'user', last_message, is_new_chat)
             save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
 
         async def search_stream_generator():
@@ -241,8 +217,42 @@ async def chat(
 
         return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
 
-    messages[-1] = ChatMessage(role=last_message.role, content=sanitized_content)
+    # RAG Mode for all users (including Admins not in Search Mode)
+    final_context_filter = None
 
+    if user_role != 'admin':
+        all_docs = ingest_service.list_ingested()
+        allowed_doc_ids = [
+            doc.doc_id for doc in all_docs if user_team in get_document_teams(doc.doc_id)
+        ]
+        if not allowed_doc_ids:
+            async def empty_stream():
+                yield f"data: {json.dumps({'delta': 'You do not have access to any documents.'})}\n\n"
+            return StreamingResponse(empty_stream(), media_type="text/event-stream")
+        if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
+            requested_doc_id = chat_body.context_filter["docs_ids"][0]
+            if requested_doc_id in allowed_doc_ids:
+                final_context_filter = ContextFilter(docs_ids=[requested_doc_id])
+            else:
+                async def denied_stream():
+                    yield f"data: {json.dumps({'delta': 'Access denied to the selected document.'})}\n\n"
+                return StreamingResponse(denied_stream(), media_type="text/event-stream")
+        else:
+            final_context_filter = ContextFilter(docs_ids=allowed_doc_ids)
+    
+    elif chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
+        final_context_filter = ContextFilter(docs_ids=chat_body.context_filter.get("docs_ids"))
+    
+    session_id = chat_body.session_id
+    is_new_chat = not session_id
+    if is_new_chat:
+        session_id = str(uuid4())
+    
+    if user_id:
+        save_chat_message(user_id, session_id, 'user', last_message, is_new_chat)
+    
+
+    messages[-1] = ChatMessage(role=l_message.role, content=last_message)
     completion_gen = chat_service.stream_chat(
         messages=messages,
         use_context=True,
@@ -253,16 +263,12 @@ async def chat(
         full_response = ""
         if is_new_chat:
             yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-            
         for delta in completion_gen.response:
             text_delta = delta if isinstance(delta, str) else delta.delta
             full_response += text_delta
             yield f"data: {json.dumps({'delta': text_delta})}\n\n"
-            await asyncio.sleep(0.02)
-        
         if user_id:
             save_chat_message(user_id, session_id, 'assistant', full_response, False)
-        
         if completion_gen.sources:
             sources_data = [
                 {
@@ -281,16 +287,11 @@ async def chat(
 @api_router.post("/upload", dependencies=[Depends(require_admin)])
 async def upload_files(
     files: List[UploadFile] = File(...), 
-    teams: str = Form("[]"),
+    teams: str = Form(...),
     ingest_service: "IngestService" = Depends(get_ingest_service)
 ):
-    try:
-        teams_list = json.loads(teams)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid format for teams. Must be a JSON array string.")
-
     temp_paths = []
-    ingest_data = []
+    ingested_docs_info = []
     
     try:
         temp_dir = Path("temp_uploads")
@@ -298,72 +299,57 @@ async def upload_files(
 
         for file in files:
             temp_path = temp_dir / file.filename
-            
             with temp_path.open("wb") as buffer:
                 buffer.write(await file.read())
-                
             temp_paths.append(temp_path)
-            ingest_data.append((str(file.filename), temp_path))
+            ingested_docs_info.append((str(file.filename), temp_path))
 
-        if ingest_data:
-            ingest_service.bulk_ingest(ingest_data)
-            for file in files:
-                add_document_tags(file.filename, teams_list)
+        if ingested_docs_info:
+            ingested_docs = ingest_service.bulk_ingest(ingested_docs_info)
+            team_list = json.loads(teams)
+            for doc in ingested_docs:
+                add_document_teams(doc.doc_id, team_list)
             
     finally:
         for path in temp_paths:
             if path.exists():
                 path.unlink()
                 
-    return JSONResponse(content={"message": f"{len(files)} file(s) uploaded and tagged successfully"}, status_code=200)
+    return JSONResponse(content={"message": f"{len(files)} file(s) uploaded successfully"}, status_code=200)
 
 @api_router.get("/files")
 def list_ingested_files(request: Request, ingest_service: "IngestService" = Depends(get_ingest_service)):
-    user_team = request.session.get("user_team")
     user_role = request.session.get("user_role")
-
-    ingested_files_in_store = {
-        doc.doc_metadata.get("file_name")
-        for doc in ingest_service.list_ingested()
-        if doc.doc_metadata and doc.doc_metadata.get("file_name")
-    }
-
-    if user_role == 'admin':
-        allowed_files = list(ingested_files_in_store)
-    elif user_team:
-        files_for_team = set(get_files_for_teams([user_team]))
-        allowed_files = list(ingested_files_in_store.intersection(files_for_team))
-    else:
-        allowed_files = []
-
-    return JSONResponse(content=[[row] for row in sorted(allowed_files)])
-
-@api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
-def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
-    doc_ids_to_delete = [
-        doc.doc_id
-        for doc in ingest_service.list_ingested()
-        if doc.doc_metadata and doc.doc_metadata.get("file_name") == file_name
-    ]
+    user_team = request.session.get("user_team")
     
-    if not doc_ids_to_delete:
-        logger.warning(f"File '{file_name}' not found in vector store, but attempting to clear tags.")
+    all_docs = ingest_service.list_ingested()
+    visible_files = []
+
+    for doc in all_docs:
+        if doc.doc_metadata:
+            file_name = doc.doc_metadata.get("file_name", "[FILE NAME MISSING]")
+            if user_role == 'admin' or user_team in get_document_teams(doc.doc_id):
+                visible_files.append([file_name, doc.doc_id])
     
-    for doc_id in doc_ids_to_delete:
+    return JSONResponse(content=sorted(visible_files, key=lambda x: x[0]))
+
+
+@api_router.delete("/files/{doc_id}", dependencies=[Depends(require_admin)])
+def delete_selected_file(doc_id: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
+    try:
         ingest_service.delete(doc_id)
-        
-    delete_document_tags(file_name)
-    
-    return {"message": f"File '{file_name}' and its tags deleted successfully"}
+        return JSONResponse(content={"message": f"File deleted successfully"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error deleting file with doc_id {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @api_router.delete("/files", dependencies=[Depends(require_admin)])
 def delete_all_files(ingest_service: "IngestService" = Depends(get_ingest_service)):
     ingested_files = ingest_service.list_ingested()
     for doc in ingested_files:
         ingest_service.delete(doc.doc_id)
-        if doc.doc_metadata and doc.doc_metadata.get("file_name"):
-            delete_document_tags(doc.doc_metadata.get("file_name"))
-    return {"message": "All files and their tags have been deleted successfully"}
+    return {"message": "All files deleted successfully"}
 
 # --- Admin Endpoints ---
 
@@ -399,7 +385,6 @@ async def handle_create_user(body: CreateUserBody):
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while creating user.")
-    
 
 @api_router.delete("/admin/users/{username}", dependencies=[Depends(require_admin)])
 async def handle_delete_user(username: str, request: Request):

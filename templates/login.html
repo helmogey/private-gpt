@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocuMind - Login</title>
+    <title>{{ app_name }} - Login</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         
@@ -177,7 +177,7 @@
             <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_bS9Z-_0BLzFCzTEys0CJPF48FS5K61yp2Q&s" alt="Logo">
         </div>
         <h1>Welcome Back</h1>
-        <p class="subtitle">Log in to your DocuMind account</p>
+        <p class="subtitle">Log in to your {{ app_name }} account</p>
         <form class="login-form" method="post" action="/login">
             <div class="input-group">
                 <input type="text" id="username" name="username" class="input-field" placeholder=" " required>

@@ -27,8 +27,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const newUserRoleSelect = document.getElementById('new-user-role');
     const newUserTeamSelect = document.getElementById('new-user-team');
     const createUserStatus = document.getElementById('create-user-status');
-    const uploadTeamTagsSelect = document.getElementById('upload-team-tags');
     const userList = document.getElementById('user-list');
+
+    // Tagging Modal Elements
+    const tagModal = document.getElementById('tag-modal');
+    const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
+    const uploadTeamTagsSelect = document.getElementById('upload-team-tags');
+    const cancelUploadBtn = document.getElementById('cancel-upload-btn');
+    const confirmUploadBtn = document.getElementById('confirm-upload-btn');
     
     // Profile & Admin Modal Elements
     const profileBtn = document.getElementById('profile-btn');
@@ -46,13 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileEmailInput = document.getElementById('profile-email');
     const profileNewPasswordInput = document.getElementById('profile-new-password');
     const profileSettingsStatus = document.getElementById('profile-settings-status');
-	
-	
-	// ADDED: References for the new Tag Modal
-    const tagModal = document.getElementById('tag-modal');
-    const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
-    const cancelUploadBtn = document.getElementById('cancel-upload-btn');
-    const confirmUploadBtn = document.getElementById('confirm-upload-btn');
+
 
     // --- State Variables ---
     let chatHistory = [];
@@ -63,8 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isTyping = false;
     let inactivityTimerId = null; 
     let maxSessionAge = 0;
-    let currentUsername = null; 
-    let filesToUpload = null;
+    let currentUsername = null;
+    let pendingFilesToUpload = null;
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
@@ -289,16 +289,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- File Management Functions ---
-    
-    async function handleFileSelectionForUpload(files) {
-        if (files.length === 0 || isUploading) return;
-        
-        // Store the files and open the modal
-        filesToUpload = files;
-        tagModal.classList.remove('hidden');
-    }
-    
-    
     async function refreshFileList() {
         try {
             const response = await fetch('/api/files');
@@ -308,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
             files.forEach(fileRow => {
                 const li = document.createElement('li');
                 li.textContent = fileRow[0];
-                li.dataset.filename = fileRow[0];
+                li.dataset.docId = fileRow[1]; // Store doc_id
                 li.addEventListener('click', () => handleFileSelection(li));
                 fileList.appendChild(li);
             });
@@ -322,8 +312,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const current = fileList.querySelector('.selected');
         if (current) current.classList.remove('selected');
         listItem.classList.add('selected');
-        selectedFile = listItem.dataset.filename;
-        selectedFileText.value = selectedFile;
+        selectedFile = listItem.dataset.docId; // Use doc_id for filtering
+        selectedFileText.value = listItem.textContent;
         deselectBtn.disabled = false;
         deleteSelectedBtn.disabled = false;
     }
@@ -337,26 +327,21 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteSelectedBtn.disabled = true;
     }
 
-     async function handleFileUpload() {
-        if (!filesToUpload || filesToUpload.length === 0 || isUploading) return;
+    async function handleFileUpload(files, teams) {
+        if (files.length === 0 || isUploading) return;
         isUploading = true;
-        
-        // Close the modal
-        tagModal.classList.add('hidden');
     
-        const fileCount = filesToUpload.length;
+        const fileCount = files.length;
         const statusMessage = `Uploading ${fileCount} file${fileCount > 1 ? 's' : ''}...`;
         showStatus(statusMessage, 'loading');
         
         updateUploadProgress(0);
         const formData = new FormData();
         
-        for (let i = 0; i < filesToUpload.length; i++) {
-            formData.append('files', filesToUpload[i]);
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
         }
-    
-        const selectedTeams = Array.from(uploadTeamTagsSelect.selectedOptions).map(option => option.value);
-        formData.append('teams', JSON.stringify(selectedTeams));
+        formData.append('teams', JSON.stringify(teams));
     
         try {
             let progress = 0;
@@ -393,13 +378,15 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             isUploading = false;
             uploadInput.value = '';
-            filesToUpload = null; // Clear the stored files
+            pendingFilesToUpload = null;
+            tagModal.classList.add('hidden');
         }
     }
 
     async function deleteAllFiles() {
         if (!confirm("Are you sure you want to delete ALL ingested files?")) return;
         try {
+            showStatus('Deleting all files...', 'loading');
             const response = await fetch('/api/files', { method: 'DELETE' });
             if (response.ok) {
                 await refreshFileList();
@@ -413,8 +400,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function deleteSelected() {
-        if (!selectedFile || !confirm(`Are you sure you want to delete ${selectedFile}?`)) return;
+        if (!selectedFile || !confirm(`Are you sure you want to delete ${selectedFileText.value}?`)) return;
         try {
+            showStatus('Deleting file...', 'loading');
             const response = await fetch(`/api/files/${selectedFile}`, { method: 'DELETE' });
             if (response.ok) {
                 await refreshFileList();
@@ -441,7 +429,10 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
         uploadZone.addEventListener('drop', e => {
             uploadZone.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) handleFileSelectionForUpload(e.dataTransfer.files);
+            if (e.dataTransfer.files.length > 0) {
+                pendingFilesToUpload = e.dataTransfer.files;
+                tagModal.classList.remove('hidden');
+            }
         });
         uploadZone.addEventListener('click', () => { if (!isUploading) uploadInput.click(); });
     }
@@ -523,34 +514,32 @@ document.addEventListener('DOMContentLoaded', () => {
         welcomeMessage.style.display = 'flex';
         if (showStatusMsg) { 
             chatHistory = [];
-            showStatus('Chat cleared', 'info');
+            // showStatus('Chat cleared', 'info');
         }
     }
 
     // --- Admin Panel Functions ---
     async function populateTeamsDropdown() {
-        const dropdowns = [newUserTeamSelect, uploadTeamTagsSelect].filter(Boolean);
-        if (dropdowns.length === 0) return;
+        if (!newUserTeamSelect && !uploadTeamTagsSelect) return;
         try {
             const response = await fetch('/api/admin/teams');
             if (!response.ok) throw new Error('Failed to fetch teams');
             const teams = await response.json();
             
-            dropdowns.forEach(dropdown => {
-                dropdown.innerHTML = '';
-                teams.forEach(team => {
-                    const option = document.createElement('option');
-                    option.value = team;
-                    option.textContent = team;
-                    dropdown.appendChild(option);
-                });
-            });
+            if (newUserTeamSelect) newUserTeamSelect.innerHTML = '';
+            if (uploadTeamTagsSelect) uploadTeamTagsSelect.innerHTML = '';
 
+            teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team;
+                option.textContent = team;
+                if (newUserTeamSelect) newUserTeamSelect.appendChild(option.cloneNode(true));
+                if (uploadTeamTagsSelect) uploadTeamTagsSelect.appendChild(option);
+            });
         } catch (error) {
             console.error('Error populating teams dropdown:', error);
-            dropdowns.forEach(dropdown => {
-                dropdown.innerHTML = '<option value="Default">Default</option>';
-            });
+            if (newUserTeamSelect) newUserTeamSelect.innerHTML = '<option value="Default">Default</option>';
+            if (uploadTeamTagsSelect) uploadTeamTagsSelect.innerHTML = '<option value="Default">Default</option>';
         }
     }
 
@@ -681,18 +670,56 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- New Function to set App Name ---
+    async function fetchAndSetAppName() {
+        try {
+            const response = await fetch('/api/app-name');
+            if (!response.ok) throw new Error('Failed to fetch app name.');
+            const data = await response.json();
+            const appName = data.appName || 'DocuMind';
+
+            // Update Title
+            document.title = `${appName} - AI-Powered Document Chat`;
+            
+            // Update Header in Sidebar
+            const headerTitle = document.getElementById('app-header-title');
+            if (headerTitle) headerTitle.textContent = appName;
+
+            // Update Welcome Message
+            const welcomeHeader = document.getElementById('welcome-header');
+            if (welcomeHeader) welcomeHeader.textContent = `Welcome to ${appName}`;
+            
+            // Update Meta Descriptions
+            document.querySelector('meta[name="description"]').setAttribute('content', `Intelligent chatbot for document analysis and conversation. Upload files and get AI-powered insights with ${appName}.`);
+            document.querySelector('meta[name="author"]').setAttribute('content', appName);
+            document.querySelector('meta[name="keywords"]').setAttribute('content', `AI chatbot, document analysis, file upload, artificial intelligence, ${appName}`);
+            document.querySelector('meta[property="og:title"]').setAttribute('content', `${appName} - AI-Powered Document Chat`);
+            document.querySelector('meta[name="twitter:title"]').setAttribute('content', `${appName} - AI-Powered Document Chat`);
+
+
+        } catch (error) {
+            console.error('Error setting app name:', error);
+        }
+    }
+
     // --- Event Listeners ---
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
     chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
-    uploadInput.addEventListener('change', e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); });
+    
+    uploadInput.addEventListener('change', e => { 
+        if (e.target.files.length > 0) {
+            pendingFilesToUpload = e.target.files;
+            tagModal.classList.remove('hidden');
+        }
+    });
+
     deselectBtn.addEventListener('click', deselectFile);
     deleteAllBtn.addEventListener('click', deleteAllFiles);
     deleteSelectedBtn.addEventListener('click', deleteSelected);
     newChatBtn.addEventListener('click', startNewChat);
     clearBtn.addEventListener('click', () => clearChat(true));
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
-    uploadInput.addEventListener('change', e => { if (e.target.files.length > 0) handleFileSelectionForUpload(e.target.files); });
     
     // Modals and Dropdowns
     if (createUserForm) createUserForm.addEventListener('submit', handleCreateUser);
@@ -703,31 +730,46 @@ document.addEventListener('DOMContentLoaded', () => {
         profileDropdown.classList.toggle('show');
     });
 
-    adminPanelLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        adminModal.classList.remove('hidden');
-        profileDropdown.classList.remove('show');
-    });
-
-    profileSettingsLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        profileModal.classList.remove('hidden');
-        profileDropdown.classList.remove('show');
-    });
-
-    [adminModalCloseBtn, profileModalCloseBtn].forEach(btn => {
-        btn.addEventListener('click', () => {
-            adminModal.classList.add('hidden');
-            profileModal.classList.add('hidden');
+    if(adminPanelLink) {
+        adminPanelLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            adminModal.classList.remove('hidden');
+            profileDropdown.classList.remove('show');
         });
+    }
+
+    if(profileSettingsLink) {
+        profileSettingsLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            profileModal.classList.remove('hidden');
+            profileDropdown.classList.remove('show');
+        });
+    }
+    
+    [adminModalCloseBtn, profileModalCloseBtn, tagModalCloseBtn, cancelUploadBtn].forEach(btn => {
+        if(btn) {
+            btn.addEventListener('click', () => {
+                adminModal.classList.add('hidden');
+                profileModal.classList.add('hidden');
+                tagModal.classList.add('hidden');
+                pendingFilesToUpload = null;
+                uploadInput.value = ''; // Reset file input
+            });
+        }
     });
 
-    [adminModal, profileModal].forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.classList.add('hidden');
-            }
-        });
+    [adminModal, profileModal, tagModal].forEach(modal => {
+        if(modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.classList.add('hidden');
+                    if (modal === tagModal) {
+                        pendingFilesToUpload = null;
+                        uploadInput.value = ''; // Reset file input
+                    }
+                }
+            });
+        }
     });
     
     window.addEventListener('click', (e) => {
@@ -736,31 +778,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    userList.addEventListener('click', (event) => {
-        const deleteButton = event.target.closest('.delete-user-btn');
-        if (deleteButton && !deleteButton.disabled) {
-            const username = deleteButton.dataset.username;
-            handleDeleteUser(username);
-        }
-    });
+    if(userList) {
+        userList.addEventListener('click', (event) => {
+            const deleteButton = event.target.closest('.delete-user-btn');
+            if (deleteButton && !deleteButton.disabled) {
+                const username = deleteButton.dataset.username;
+                handleDeleteUser(username);
+            }
+        });
+    }
     
-    
-    confirmUploadBtn.addEventListener('click', handleFileUpload);
-    
-    const closeTagModal = () => {
-        tagModal.classList.add('hidden');
-        uploadInput.value = ''; // Clear the file input to allow re-selection of the same file
-        filesToUpload = null;
-    };
-    
-    tagModalCloseBtn.addEventListener('click', closeTagModal);
-    cancelUploadBtn.addEventListener('click', closeTagModal);
-    tagModal.addEventListener('click', (e) => {
-        if (e.target === tagModal) {
-            closeTagModal();
-        }
-    });
-    
+    if (confirmUploadBtn) {
+        confirmUploadBtn.addEventListener('click', () => {
+            const selectedTeams = Array.from(uploadTeamTagsSelect.selectedOptions).map(option => option.value);
+            if (selectedTeams.length === 0) {
+                showStatus('Please select at least one team.', 'error');
+                return;
+            }
+            if (pendingFilesToUpload) {
+                handleFileUpload(pendingFilesToUpload, selectedTeams);
+            }
+        });
+    }
+
 
     // --- Initialization ---
     manageTheme();
@@ -771,5 +811,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchUserInfo();
     setupSessionTimeout();
     loadInitialChat();
+    fetchAndSetAppName();
 });
 
