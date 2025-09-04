@@ -10,18 +10,21 @@
         :root {
             --background-start: #111827;
             --background-end: #1F2937;
-            --form-bg-color: rgba(31, 41, 55, 0.5);
+            --form-bg-color: #1c1c1c; /* Darker solid background for contrast */
             --primary-color: #8B5CF6;
+            --secondary-color: #3b82f6;
             --primary-color-hover: #7C3AED;
             --text-color: #F9FAFB;
             --text-color-muted: #9CA3AF;
-            --border-color: rgba(139, 92, 246, 0.4);
+            --border-color: rgba(130, 92, 246, 0.4);
             --error-color: #F87171;
             --shadow-color: rgba(0, 0, 0, 0.5);
         }
 
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         @keyframes fadeIn {
@@ -34,6 +37,12 @@
                 transform: scale(1);
             }
         }
+        
+        /* --- Animation keyframes for the rotating border --- */
+        @keyframes rotate-border {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
         body {
             font-family: 'Inter', sans-serif;
@@ -42,7 +51,6 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
-            margin: 0;
             background-color: var(--background-start);
             overflow: hidden;
             position: relative;
@@ -56,22 +64,55 @@
             height: 100%;
             z-index: 1;
         }
-
+        
+        /* --- STYLING FOR LOGIN CONTAINER (Animation Shell) --- */
         .login-container {
-            position: relative;
+            position: relative; 
             z-index: 2;
-            background: var(--form-bg-color);
-            backdrop-filter: blur(20px) saturate(180%);
-            -webkit-backdrop-filter: blur(20px) saturate(180%);
-            padding: 40px;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px var(--shadow-color);
             width: 100%;
             max-width: 400px;
-            text-align: center;
-            border: 1px solid var(--border-color);
+            min-height: 550px;
+            background: var(--form-bg-color);
+            border-radius: 20px; 
+            overflow: hidden; 
+            box-shadow: 0 10px 40px var(--shadow-color);
             animation: fadeIn 0.8s ease-out forwards;
         }
+        
+        /* --- FIX: Using the corner-spin technique for a consistent beam effect --- */
+        .login-container::before,
+        .login-container::after {
+            content: '';
+            position: absolute;
+            /* REMOVED z-index to allow content wrapper to sit on top */
+            top: -50%;
+            left: -50%;
+            width: 400px;
+            height: 550px;
+            transform-origin: bottom right;
+            animation: rotate-border 6s linear infinite;
+        }
+
+        .login-container::before {
+            background: linear-gradient(0deg, transparent, var(--primary-color), var(--primary-color));
+        }
+
+        .login-container::after {
+           background: linear-gradient(0deg, transparent, var(--secondary-color), var(--secondary-color));
+           animation-delay: -3s; /* Offset the second beam */
+        }
+        
+        /* This wrapper holds the actual content, masking the gradient behind it */
+        .login-content-wrapper {
+            position: absolute;
+            inset: 3px; /* This creates the border thickness */
+            background: var(--form-bg-color);
+            border-radius: 17px; /* Slightly smaller than parent */
+            z-index: 1; /* Sits on top of the rotating gradients */
+            padding: 40px;
+            text-align: center;
+        }
+
 
         .logo-container {
             margin-bottom: 24px;
@@ -120,7 +161,7 @@
             color: var(--text-color-muted);
             pointer-events: none;
             transition: all 0.2s ease-in-out;
-            background-color: #2a3444; /* Match form background to cover line */
+            background-color: var(--form-bg-color); /* Match the container background */
             padding: 0 4px;
         }
 
@@ -166,38 +207,42 @@
             margin-top: 20px;
             height: 20px;
             font-weight: 500;
-            visibility: {% if error %}visible{% else %}hidden{% endif %};
         }
     </style>
 </head>
 <body>
     <canvas id="particle-canvas"></canvas>
+    
+    <!-- This container is now the shell for the animation -->
     <div class="login-container">
-        <div class="logo-container">
-            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_bS9Z-_0BLzFCzTEys0CJPF48FS5K61yp2Q&s" alt="Logo">
+        <!-- This new wrapper holds all the content to keep it separate from the animation layers -->
+        <div class="login-content-wrapper">
+            <div class="logo-container">
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_bS9Z-_0BLzFCzTEys0CJPF48FS5K61yp2Q&s" alt="Logo">
+			</div>
+            <h1>Welcome Back</h1>
+            <p class="subtitle">Log in to your {{ app_name }} account</p>
+            
+            <form class="login-form" method="post" action="/login">
+                <div class="input-group">
+                    <input type="text" id="username" name="username" class="input-field" placeholder=" " required>
+                    <label for="username" class="input-label">Username</label>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" name="password" class="input-field" placeholder=" " required>
+                    <label for="password" class="input-label">Password</label>
+                </div>
+                <button type="submit" class="submit-btn">Log In</button>
+            </form>
+
+            {% if error %}
+            <p class="error-message">{{ error }}</p>
+            {% endif %}
         </div>
-        <h1>Welcome Back</h1>
-        <p class="subtitle">Log in to your {{ app_name }} account</p>
-        <form class="login-form" method="post" action="/login">
-            <div class="input-group">
-                <input type="text" id="username" name="username" class="input-field" placeholder=" " required>
-                <label for="username" class="input-label">Username</label>
-            </div>
-            <div class="input-group">
-                <input type="password" id="password" name="password" class="input-field" placeholder=" " required>
-                <label for="password" class="input-label">Password</label>
-            </div>
-            <button type="submit" class="submit-btn">Log In</button>
-        </form>
-        <p class="error-message">
-            {% if error %}{{ error }}{% endif %}
-        </p>
     </div>
 
     <script>
         // --- Interactive Input Field Logic ---
-        // This handles the placeholder-to-label animation.
-        // It's already done mostly with CSS, this is just for robustness.
         const inputs = document.querySelectorAll('.input-field');
         inputs.forEach(input => {
             input.addEventListener('blur', () => {
@@ -250,6 +295,7 @@
         }
 
         function animateParticles() {
+            if (!ctx) return; 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let i = 0; i < particles.length; i++) {
                 particles[i].update();
@@ -260,6 +306,7 @@
         }
 
         function connectParticles() {
+            if (!ctx) return; 
             let opacityValue = 1;
             for (let a = 0; a < particles.length; a++) {
                 for (let b = a; b < particles.length; b++) {
