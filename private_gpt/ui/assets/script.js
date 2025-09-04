@@ -379,7 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
             isUploading = false;
             uploadInput.value = '';
             pendingFilesToUpload = null;
-            tagModal.classList.add('hidden');
         }
     }
 
@@ -796,6 +795,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             if (pendingFilesToUpload) {
+                // This is the only change: close the modal immediately.
+                tagModal.classList.add('hidden');
                 handleFileUpload(pendingFilesToUpload, selectedTeams);
             }
         });

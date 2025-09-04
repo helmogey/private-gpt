@@ -158,28 +158,44 @@ async def chat(
     user_role = request.session.get("user_role")
     user_team = request.session.get("user_team")
 
-
-
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
-    
-    l_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
-    current_day = datetime.now().day
-    processed_message = l_message.content.lower().replace("today's", f"at Day {current_day}").replace("today", f"at Day {current_day}")
-    last_message = processed_message.replace("{", "{{").replace("}", "}}")
-    # --- EDITED: ADDED MODE HANDLING ---
+    last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
 
+    # Save the original user message to the database before modifying it
+    session_id = chat_body.session_id
+    is_new_chat = not session_id
+    if is_new_chat:
+        session_id = str(uuid4())
+
+    if user_id:
+        save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
+
+    # NEW: Conditionally add date context
+    time_keywords = [
+        "today", "yesterday", "tomorrow", "week", "month", "year", "now",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "january", "february", "march", "april", "may", "june", "july",
+        "august", "september", "october", "november", "december"
+    ]
+    
+    if any(keyword in last_message.content.lower() for keyword in time_keywords):
+        current_date_str = datetime.now().strftime("%A, %B %d, %Y")
+        prompt_with_date = (
+            f"Assuming today's date is {current_date_str}, "
+            f"please answer the following user query:\n\n{last_message.content}"
+        )
+        if messages:
+            messages[-1].content = prompt_with_date
 
     # Handle Search Mode for Admins
     if user_role == 'admin' and chat_body.mode == Modes.SEARCH_MODE:
-        
-        
         context_filter = None
         if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
              context_filter = ContextFilter(docs_ids=chat_body.context_filter.get("docs_ids"))
 
         n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
         relevant_chunks = chunks_service.retrieve_relevant(
-            text=last_message, 
+            text=last_message.content, # Use original message for search
             limit=n_chunks, 
             prev_next_chunks=0,
             context_filter=context_filter
@@ -199,13 +215,7 @@ async def chat(
             for source in sources_data
         ) or "No relevant documents found for your search."
         
-        session_id = chat_body.session_id
-        is_new_chat = not session_id
-        if is_new_chat:
-            session_id = str(uuid4())
-
         if user_id:
-            save_chat_message(user_id, session_id, 'user', last_message, is_new_chat)
             save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
 
         async def search_stream_generator():
@@ -243,16 +253,6 @@ async def chat(
     elif chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
         final_context_filter = ContextFilter(docs_ids=chat_body.context_filter.get("docs_ids"))
     
-    session_id = chat_body.session_id
-    is_new_chat = not session_id
-    if is_new_chat:
-        session_id = str(uuid4())
-    
-    if user_id:
-        save_chat_message(user_id, session_id, 'user', last_message, is_new_chat)
-    
-
-    messages[-1] = ChatMessage(role=l_message.role, content=last_message)
     completion_gen = chat_service.stream_chat(
         messages=messages,
         use_context=True,
@@ -282,8 +282,6 @@ async def chat(
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-# --- File Management Endpoints ---
-
 @api_router.post("/upload", dependencies=[Depends(require_admin)])
 async def upload_files(
     files: List[UploadFile] = File(...), 
@@ -307,8 +305,20 @@ async def upload_files(
         if ingested_docs_info:
             ingested_docs = ingest_service.bulk_ingest(ingested_docs_info)
             team_list = json.loads(teams)
+            
+            # Group ingested docs by filename to correctly assign teams
+            docs_by_filename = {}
             for doc in ingested_docs:
-                add_document_teams(doc.doc_id, team_list)
+                filename = doc.doc_metadata.get("file_name")
+                if filename:
+                    if filename not in docs_by_filename:
+                        docs_by_filename[filename] = []
+                    docs_by_filename[filename].append(doc.doc_id)
+
+            for filename, doc_ids in docs_by_filename.items():
+                # Associate all doc_ids for a file with the selected teams
+                for doc_id in doc_ids:
+                    add_document_teams(doc_id, team_list)
             
     finally:
         for path in temp_paths:
@@ -323,25 +333,48 @@ def list_ingested_files(request: Request, ingest_service: "IngestService" = Depe
     user_team = request.session.get("user_team")
     
     all_docs = ingest_service.list_ingested()
-    visible_files = []
+    visible_files = set()
+
+    # Create a mapping from doc_id to its teams for efficient lookup
+    doc_teams_map = {doc.doc_id: get_document_teams(doc.doc_id) for doc in all_docs}
 
     for doc in all_docs:
         if doc.doc_metadata:
-            file_name = doc.doc_metadata.get("file_name", "[FILE NAME MISSING]")
-            if user_role == 'admin' or user_team in get_document_teams(doc.doc_id):
-                visible_files.append([file_name, doc.doc_id])
+            file_name = doc.doc_metadata.get("file_name")
+            if not file_name:
+                continue
+            
+            doc_teams = doc_teams_map.get(doc.doc_id, [])
+            if user_role == 'admin' or user_team in doc_teams:
+                visible_files.add(file_name)
     
-    return JSONResponse(content=sorted(visible_files, key=lambda x: x[0]))
+    return JSONResponse(content=[[name] for name in sorted(list(visible_files))])
 
 
-@api_router.delete("/files/{doc_id}", dependencies=[Depends(require_admin)])
-def delete_selected_file(doc_id: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
-    try:
-        ingest_service.delete(doc_id)
-        return JSONResponse(content={"message": f"File deleted successfully"}, status_code=200)
-    except Exception as e:
-        logger.error(f"Error deleting file with doc_id {doc_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
+def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
+    # URL encoding might replace spaces with '%20', etc.
+    decoded_file_name = unquote(file_name)
+    
+    # Find all doc_ids associated with the given file_name
+    all_docs = ingest_service.list_ingested()
+    doc_ids_to_delete = [
+        doc.doc_id for doc in all_docs 
+        if doc.doc_metadata and doc.doc_metadata.get("file_name") == decoded_file_name
+    ]
+
+    if not doc_ids_to_delete:
+        raise HTTPException(status_code=404, detail=f"File '{decoded_file_name}' not found.")
+
+    # Delete each document chunk
+    for doc_id in doc_ids_to_delete:
+        try:
+            ingest_service.delete(doc_id)
+        except Exception as e:
+            logger.error(f"Error deleting chunk {doc_id} for file {decoded_file_name}: {e}")
+            # Decide if you want to continue or raise an error
+    
+    return JSONResponse(content={"message": f"File '{decoded_file_name}' deleted successfully"}, status_code=200)
 
 
 @api_router.delete("/files", dependencies=[Depends(require_admin)])
