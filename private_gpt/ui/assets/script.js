@@ -729,13 +729,7 @@ document.addEventListener('DOMContentLoaded', () => {
         profileDropdown.classList.toggle('show');
     });
 
-    if(adminPanelLink) {
-        adminPanelLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            adminModal.classList.remove('hidden');
-            profileDropdown.classList.remove('show');
-        });
-    }
+
 
     if(profileSettingsLink) {
         profileSettingsLink.addEventListener('click', (e) => {

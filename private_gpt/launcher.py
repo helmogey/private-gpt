@@ -33,6 +33,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         # These paths are required for the login page and the Gradio UI to function correctly.
         allowed_paths = [
             "/login",          # The login page itself
+            "/admin",
             "/custom",
             "/static",         # Static assets for the login page
             "/docs",           # API documentation
@@ -102,6 +103,7 @@ def create_app(root_injector: Injector) -> FastAPI:
         response = RedirectResponse(url="/login", status_code=303)
         response.delete_cookie("session", path="/")
         return response
+    
 
 ################################################################################################
     app.include_router(completions_router)

@@ -4,13 +4,12 @@ from pathlib import Path
 from typing import Any
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse
+from fastapi import FastAPI, Request
+from starlette.responses import FileResponse, RedirectResponse, Response
 from injector import inject, singleton
-from llama_index.core.llms import ChatMessage, MessageRole
+from starlette.responses import FileResponse, RedirectResponse
 from enum import Enum
 from private_gpt.constants import PROJECT_ROOT_PATH
-from private_gpt.di import global_injector
-from private_gpt.open_ai.extensions.context_filter import ContextFilter
 from private_gpt.server.chat.chat_service import ChatService
 from private_gpt.server.ingest.ingest_service import IngestService
 from private_gpt.settings.settings import settings
@@ -72,7 +71,14 @@ class PrivateGptUi:
             name="assets",
         )
         
-        app.include_router(api_router)
+        app.include_router(api_router)      
+
+        @app.get("/admin", include_in_schema=False)
+        async def admin_page(request: Request) -> Response:
+            if request.session.get("user_role") != "admin":
+                return RedirectResponse(url="/", status_code=303)
+            
+            return FileResponse(assets_path / "admin.html")
 
         @app.get("/", include_in_schema=False)
         async def root() -> FileResponse:

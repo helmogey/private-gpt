@@ -6,6 +6,7 @@ from typing import List
 from enum import Enum
 from uuid import uuid4
 from datetime import datetime
+from urllib.parse import unquote
 
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -85,6 +86,10 @@ class UpdateUserBody(BaseModel):
     name: str
     email: str
     new_password: str | None = None
+
+class DocumentPermissionBody(BaseModel):
+    doc_id: str
+    teams: list[str]
 
 # --- UI Session & User Info Endpoints ---
 
@@ -237,6 +242,8 @@ async def chat(
         ]
         if not allowed_doc_ids:
             async def empty_stream():
+                if is_new_chat:
+                    yield f"data: {json.dumps({'session_id': session_id})}\n\n"
                 yield f"data: {json.dumps({'delta': 'You do not have access to any documents.'})}\n\n"
             return StreamingResponse(empty_stream(), media_type="text/event-stream")
         if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
@@ -245,6 +252,8 @@ async def chat(
                 final_context_filter = ContextFilter(docs_ids=[requested_doc_id])
             else:
                 async def denied_stream():
+                    if is_new_chat:
+                        yield f"data: {json.dumps({'session_id': session_id})}\n\n"
                     yield f"data: {json.dumps({'delta': 'Access denied to the selected document.'})}\n\n"
                 return StreamingResponse(denied_stream(), media_type="text/event-stream")
         else:
@@ -333,7 +342,7 @@ def list_ingested_files(request: Request, ingest_service: "IngestService" = Depe
     user_team = request.session.get("user_team")
     
     all_docs = ingest_service.list_ingested()
-    visible_files = set()
+    visible_files = {} # Use a dict to store name and one doc_id
 
     # Create a mapping from doc_id to its teams for efficient lookup
     doc_teams_map = {doc.doc_id: get_document_teams(doc.doc_id) for doc in all_docs}
@@ -346,17 +355,18 @@ def list_ingested_files(request: Request, ingest_service: "IngestService" = Depe
             
             doc_teams = doc_teams_map.get(doc.doc_id, [])
             if user_role == 'admin' or user_team in doc_teams:
-                visible_files.add(file_name)
+                # Store the filename and one associated doc_id
+                if file_name not in visible_files:
+                    visible_files[file_name] = doc.doc_id
     
-    return JSONResponse(content=[[name] for name in sorted(list(visible_files))])
+    # Format for the frontend [[file_name, doc_id]]
+    return JSONResponse(content=[[name, doc_id] for name, doc_id in sorted(visible_files.items())])
 
 
 @api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
 def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
-    # URL encoding might replace spaces with '%20', etc.
     decoded_file_name = unquote(file_name)
     
-    # Find all doc_ids associated with the given file_name
     all_docs = ingest_service.list_ingested()
     doc_ids_to_delete = [
         doc.doc_id for doc in all_docs 
@@ -366,14 +376,12 @@ def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depen
     if not doc_ids_to_delete:
         raise HTTPException(status_code=404, detail=f"File '{decoded_file_name}' not found.")
 
-    # Delete each document chunk
     for doc_id in doc_ids_to_delete:
         try:
             ingest_service.delete(doc_id)
         except Exception as e:
             logger.error(f"Error deleting chunk {doc_id} for file {decoded_file_name}: {e}")
-            # Decide if you want to continue or raise an error
-    
+
     return JSONResponse(content={"message": f"File '{decoded_file_name}' deleted successfully"}, status_code=200)
 
 
@@ -385,6 +393,61 @@ def delete_all_files(ingest_service: "IngestService" = Depends(get_ingest_servic
     return {"message": "All files deleted successfully"}
 
 # --- Admin Endpoints ---
+
+@api_router.get("/admin/documents/permissions", dependencies=[Depends(require_admin)])
+def get_documents_with_permissions(ingest_service: "IngestService" = Depends(get_ingest_service)):
+    """Retrieves all unique documents and their associated teams."""
+    all_docs = ingest_service.list_ingested()
+    
+    # Use a dictionary to handle multiple chunks from the same file
+    unique_files = {}
+    for doc in all_docs:
+        if doc.doc_metadata and doc.doc_metadata.get("file_name"):
+            file_name = doc.doc_metadata.get("file_name")
+            # Store the first doc_id found for a given file name
+            if file_name not in unique_files:
+                unique_files[file_name] = doc.doc_id
+
+    result = []
+    for file_name, doc_id in unique_files.items():
+        teams = get_document_teams(doc_id)
+        result.append({
+            "doc_id": doc_id, # We only need one ID to manage teams for the whole file
+            "file_name": file_name,
+            "teams": teams
+        })
+        
+    return JSONResponse(content=sorted(result, key=lambda x: x['file_name']))
+
+@api_router.post("/admin/documents/permissions", dependencies=[Depends(require_admin)])
+def update_document_permissions(body: DocumentPermissionBody, ingest_service: "IngestService" = Depends(get_ingest_service)):
+    """Updates the team permissions for all chunks of a document."""
+    try:
+        # Find the target document from the list of all ingested documents
+        all_docs = ingest_service.list_ingested()
+        target_doc = next((doc for doc in all_docs if doc.doc_id == body.doc_id), None)
+
+        if not target_doc or not target_doc.doc_metadata:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        
+        file_name = target_doc.doc_metadata.get("file_name")
+        if not file_name:
+            raise HTTPException(status_code=400, detail="Document is missing a file name.")
+
+        # Find all doc_ids associated with that file_name
+        doc_ids_to_update = [
+            doc.doc_id for doc in all_docs 
+            if doc.doc_metadata and doc.doc_metadata.get("file_name") == file_name
+        ]
+
+        # Update teams for every chunk of the document
+        for doc_id in doc_ids_to_update:
+            add_document_teams(doc_id, body.teams)
+            
+        return JSONResponse(content={"message": "Permissions updated successfully"})
+    except Exception as e:
+        logger.error(f"Error updating permissions for doc_id {body.doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/admin/teams")
 async def get_teams_list():
