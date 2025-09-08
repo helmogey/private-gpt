@@ -24,7 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tagging Modal Elements
     const tagModal = document.getElementById('tag-modal');
     const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
-    const uploadTeamTagsSelect = document.getElementById('upload-team-tags');
+    const availableTeamsList = document.getElementById('available-teams-list');
+    const selectedTeamsList = document.getElementById('selected-teams-list');
     const cancelUploadBtn = document.getElementById('cancel-upload-btn');
     const confirmUploadBtn = document.getElementById('confirm-upload-btn');
     
@@ -55,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let maxSessionAge = 0;
     let currentUsername = null;
     let pendingFilesToUpload = null;
+    let allTeams = [];
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
@@ -311,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const current = fileList.querySelector('.selected');
         if (current) current.classList.remove('selected');
         listItem.classList.add('selected');
-        selectedFile = listItem.textContent; 
+        selectedFile = listItem.textContent;
         selectedFileText.value = listItem.textContent;
         deselectBtn.disabled = false;
         deleteSelectedBtn.disabled = false;
@@ -432,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadZone.classList.remove('drag-over');
             if (e.dataTransfer.files.length > 0) {
                 pendingFilesToUpload = e.dataTransfer.files;
-                tagModal.classList.remove('hidden');
+                openTeamTagModal();
             }
         });
         uploadZone.addEventListener('click', () => { if (!isUploading) uploadInput.click(); });
@@ -465,7 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.hidden-by-role').forEach(el => {
                     el.classList.remove('hidden-by-role');
                 });
-                await populateTeamsDropdown();
+                await fetchAndStoreTeams();
             }
         } catch (error) {
             console.error('Error fetching user info:', error);
@@ -517,26 +519,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Admin-related (Upload Modal) ---
-    async function populateTeamsDropdown() {
-        if (!uploadTeamTagsSelect) return;
+    // --- Dual-List Team Selector Logic ---
+    async function fetchAndStoreTeams() {
         try {
             const response = await fetch('/api/admin/teams');
             if (!response.ok) throw new Error('Failed to fetch teams');
-            const teams = await response.json();
-            
-            uploadTeamTagsSelect.innerHTML = '';
-            teams.forEach(team => {
-                const option = document.createElement('option');
-                option.value = team;
-                option.textContent = team;
-                uploadTeamTagsSelect.appendChild(option);
-            });
+            allTeams = await response.json();
         } catch (error) {
-            console.error('Error populating teams dropdown:', error);
-            uploadTeamTagsSelect.innerHTML = '<option value="Default">Default</option>';
+            console.error('Error fetching teams list:', error);
+            allTeams = ['Default']; // Fallback
         }
     }
+
+    function renderTeamSelector() {
+        availableTeamsList.innerHTML = '';
+        selectedTeamsList.innerHTML = '';
+        allTeams.forEach(team => {
+            const li = document.createElement('li');
+            li.className = 'team-list-item';
+            li.textContent = team;
+            li.dataset.team = team;
+            availableTeamsList.appendChild(li);
+        });
+    }
+    
+    function openTeamTagModal() {
+        renderTeamSelector();
+        tagModal.classList.remove('hidden');
+    }
+
+    function moveTeamItem(element, fromList, toList) {
+        fromList.removeChild(element);
+        toList.appendChild(element);
+    }
+
 
     // --- Profile Settings Functions ---
     async function handleUpdateProfile(event) {
@@ -613,7 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
     uploadInput.addEventListener('change', e => { 
         if (e.target.files.length > 0) {
             pendingFilesToUpload = e.target.files;
-            tagModal.classList.remove('hidden');
+            openTeamTagModal();
         }
     });
 
@@ -673,7 +689,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (confirmUploadBtn) {
         confirmUploadBtn.addEventListener('click', () => {
-            const selectedTeams = Array.from(uploadTeamTagsSelect.selectedOptions).map(option => option.value);
+            const selectedTeamElements = selectedTeamsList.querySelectorAll('.team-list-item');
+            const selectedTeams = Array.from(selectedTeamElements).map(el => el.dataset.team);
+            
             if (selectedTeams.length === 0) {
                 showStatus('Please select at least one team.', 'error');
                 return;
@@ -685,6 +703,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    availableTeamsList.addEventListener('click', e => {
+        if (e.target.classList.contains('team-list-item')) {
+            moveTeamItem(e.target, availableTeamsList, selectedTeamsList);
+        }
+    });
+
+    selectedTeamsList.addEventListener('click', e => {
+        if (e.target.classList.contains('team-list-item')) {
+            moveTeamItem(e.target, selectedTeamsList, availableTeamsList);
+        }
+    });
 
     // --- Initialization ---
     manageTheme();

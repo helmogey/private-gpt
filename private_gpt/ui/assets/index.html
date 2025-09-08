@@ -24,8 +24,8 @@
 </head>
 <body>
     <div id="main-container">
-        <!-- Sidebar Column 1: Settings & File Management -->
-        <aside class="sidebar-primary glass-panel">
+        <!-- Column 1: Settings & File Management -->
+        <aside class="sidebar-primary">
             <div id="sidebar-header">
                 <div class="logo-container">
                     <div class="logo-icon">
@@ -92,7 +92,7 @@
                     </div>
                 </div>
             </section>
-            
+
             <!-- Chat Settings Section -->
             <section class="accordion hidden-by-role" id="chat-settings-section">
                 <h2 class="accordion-header" onclick="toggleAccordion(this)">
@@ -109,8 +109,8 @@
                 </div>
             </section>
         </aside>
-        
-        <!-- Sidebar Column 2: Chat Sessions -->
+
+        <!-- Column 2: Chat Sessions -->
         <aside class="sidebar-secondary">
             <div class="chat-sessions-header">
                 <h3>Chat Sessions</h3>
@@ -125,7 +125,7 @@
             </div>
         </aside>
 
-        <!-- Main Chat Area -->
+        <!-- Column 3: Main Chat Area -->
         <main id="col">
             <div class="chat-view-header">
                 <h2 id="chat-title">New Chat</h2>
@@ -160,6 +160,7 @@
                     </div>
                 </div>
             </div>
+
             <div id="chatbot">
                 <div class="welcome-message" id="welcome-message">
                     <div class="welcome-icon">
@@ -226,12 +227,20 @@
                 <button id="tag-modal-close-btn" class="theme-toggle">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label for="upload-team-tags">Select Team(s)</label>
-                    <select id="upload-team-tags" class="textbox" multiple style="height: 120px;">
-                        <!-- Team options will be populated by JavaScript -->
-                    </select>
-                    <p class="form-hint">Select one or more teams that can access the uploaded document(s). Use Ctrl+Click (or Cmd+Click on Mac) to select multiple.</p>
+                <p class="form-hint">Select one or more teams that can access the uploaded document(s).</p>
+                <div class="team-selector-container">
+                    <div class="team-list-box">
+                        <h4>Available Teams</h4>
+                        <ul id="available-teams-list" class="team-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+                    <div class="team-list-box">
+                        <h4>Selected Teams</h4>
+                        <ul id="selected-teams-list" class="team-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button id="cancel-upload-btn" class="icon-button">Cancel</button>

@@ -380,6 +380,49 @@ body.dark {
     width: auto; /* Override inline styles */
 }
 
+/* --- 9. TEAM SELECTOR STYLES --- */
+.team-selector-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+.team-list-box {
+    display: flex;
+    flex-direction: column;
+}
+.team-list-box h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--foreground-muted);
+}
+.team-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    height: 150px;
+    overflow-y: auto;
+    background: var(--background);
+}
+.team-list-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background-color var(--transition-fast);
+}
+.team-list-item:last-child {
+    border-bottom: none;
+}
+.team-list-item:hover {
+    background-color: var(--background-muted);
+}
+#selected-teams-list .team-list-item:hover {
+    background-color: hsla(0, 84.2%, 60.2%, 0.1);
+}
+
 .hidden { display: none; }
 
 /* Responsive Design */
