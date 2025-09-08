@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeRadios = document.querySelectorAll('input[name="mode"]');
     const chatList = document.getElementById('chat-list');
     const newChatBtn = document.getElementById('new-chat-btn');
+    const chatTitle = document.getElementById('chat-title');
     
     // Tagging Modal Elements
     const tagModal = document.getElementById('tag-modal');
@@ -153,6 +154,11 @@ document.addEventListener('DOMContentLoaded', () => {
         currentSessionId = sessionId;
         chatHistory = [];
         clearChat(false);
+        const sessionElement = document.querySelector(`.chat-session[data-session-id="${sessionId}"]`);
+        if (sessionElement) {
+            chatTitle.textContent = sessionElement.textContent;
+        }
+
 
         document.querySelectorAll('#chat-list .chat-session').forEach(li => {
             li.classList.toggle('active', li.dataset.sessionId === sessionId);
@@ -179,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory = [];
         clearChat(false);
         document.querySelectorAll('#chat-list .chat-session.active').forEach(li => li.classList.remove('active'));
+        chatTitle.textContent = "New Chat";
         chatInput.focus();
     }
 
@@ -266,6 +273,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newSessionIdReceived) {
                 currentSessionId = newSessionIdReceived;
                 await refreshChatList();
+                const newSessionElement = document.querySelector(`.chat-session[data-session-id="${currentSessionId}"]`);
+                if (newSessionElement) {
+                    chatTitle.textContent = newSessionElement.textContent;
+                }
             }
         } catch (error) {
             console.error('Chat error:', error);
@@ -287,7 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
             files.forEach(fileRow => {
                 const li = document.createElement('li');
                 li.textContent = fileRow[0];
-                li.dataset.docId = fileRow[1]; // Store doc_id
                 li.addEventListener('click', () => handleFileSelection(li));
                 fileList.appendChild(li);
             });
@@ -301,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const current = fileList.querySelector('.selected');
         if (current) current.classList.remove('selected');
         listItem.classList.add('selected');
-        selectedFile = listItem.dataset.docId; // Use doc_id for filtering
+        selectedFile = listItem.textContent; 
         selectedFileText.value = listItem.textContent;
         deselectBtn.disabled = false;
         deleteSelectedBtn.disabled = false;
@@ -391,15 +401,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!selectedFile || !confirm(`Are you sure you want to delete ${selectedFileText.value}?`)) return;
         try {
             showStatus('Deleting file...', 'loading');
-            const response = await fetch(`/api/files/${selectedFileText.value}`, { method: 'DELETE' });
+            const response = await fetch(`/api/files/${encodeURIComponent(selectedFileText.value)}`, { method: 'DELETE' });
             if (response.ok) {
                 await refreshFileList();
                 deselectFile();
                 showStatus('File deleted', 'success');
-            } else { throw new Error('Delete failed'); }
+            } else { 
+                const error = await response.json();
+                throw new Error(error.detail || 'Delete failed'); 
+            }
         } catch (error) {
             console.error('Error deleting selected file:', error);
-            showStatus('Failed to delete file', 'error');
+            showStatus(error.message, 'error');
         }
     }
 
@@ -501,7 +514,6 @@ document.addEventListener('DOMContentLoaded', () => {
         welcomeMessage.style.display = 'flex';
         if (showStatusMsg) { 
             chatHistory = [];
-            // showStatus('Chat cleared', 'info');
         }
     }
 

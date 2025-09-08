@@ -176,6 +176,24 @@ body.dark {
 
 /* --- 4. CHAT AREA --- */
 #col { flex: 1; background: var(--surface); border-radius: var(--radius-xl); border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-md); }
+
+.chat-view-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+#chat-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 #chatbot { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
 .welcome-message { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 1rem; }
 .welcome-icon { width: 10rem; height: 10rem; border-radius: 50%; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; color: var(--primary-foreground); box-shadow: var(--shadow-glow); animation: glow 2s ease-in-out infinite; }
@@ -257,10 +275,7 @@ body.dark {
 
 /* --- 7. PROFILE DROPDOWN --- */
 #page-header-actions {
-    position: absolute;
-    top: 1rem;
-    right: 1.5rem;
-    z-index: 150;
+    position: relative; /* Changed from absolute */
     display: flex;
     gap: 0.5rem;
     align-items: center;
@@ -388,3 +403,4 @@ body.dark {
         height: 70vh; 
     } 
 }
+
