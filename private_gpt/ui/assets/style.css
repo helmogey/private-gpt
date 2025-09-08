@@ -369,6 +369,17 @@ body.dark {
 .modal-header h2 { font-size: 1.25rem; }
 .modal-header button { font-size: 1.5rem; font-weight: bold; line-height: 1; }
 
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.modal-actions .icon-button {
+    flex: 1; /* Allow buttons to share space equally */
+    width: auto; /* Override inline styles */
+}
+
 .hidden { display: none; }
 
 /* Responsive Design */
