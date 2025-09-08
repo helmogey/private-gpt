@@ -419,7 +419,8 @@ body.dark {
 .team-list-item:hover {
     background-color: var(--background-muted);
 }
-#selected-teams-list .team-list-item:hover {
+#selected-teams-list .team-list-item:hover,
+#assigned-teams-list-modal .team-list-item:hover {
     background-color: hsla(0, 84.2%, 60.2%, 0.1);
 }
 

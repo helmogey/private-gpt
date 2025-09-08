@@ -5,284 +5,129 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - DocuMind</title>
     <link rel="stylesheet" href="/assets/style.css">
-    <style>
-        body {
-            background-color: var(--background);
-            color: var(--foreground);
-            font-family: var(--font-family);
-            padding: 2rem;
-        }
-        /* Style adjustments for header buttons on this page */
-        #page-header-actions {
-            position: absolute;
-            top: 1.5rem;
-            right: 2.5rem;
-            z-index: 150;
-        }
-        .admin-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: var(--surface);
-            padding: 2rem;
-            border-radius: var(--radius-xl);
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow-lg);
-        }
-        .admin-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 1rem;
-            margin-bottom: 2rem;
-        }
-        .admin-header h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-        .back-button {
-            text-decoration: none;
-            background: var(--primary);
-            color: var(--primary-foreground);
-            padding: 0.6rem 1.2rem;
-            border-radius: var(--radius-md);
-            font-weight: 500;
-            transition: all var(--transition-fast);
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            box-shadow: var(--shadow-sm);
-        }
-        .back-button:hover {
-            background: var(--primary-variant);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 1.5rem;
-        }
-        .tab-button {
-            padding: 0.75rem 1.5rem;
-            cursor: pointer;
-            border: none;
-            background-color: transparent;
-            color: var(--foreground-muted);
-            font-size: 1rem;
-            font-weight: 500;
-            border-bottom: 2px solid transparent;
-            transition: all var(--transition-fast);
-        }
-        .tab-button.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-            animation: fadeInUp 0.3s ease-out;
-        }
-        #document-management-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        #document-management-table th, #document-management-table td {
-            padding: 0.75rem 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-            vertical-align: middle;
-        }
-        #document-management-table th {
-            font-weight: 600;
-            color: var(--foreground-muted);
-        }
-        .team-badge-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        .team-badge {
-            background-color: var(--background-muted);
-            color: var(--foreground-muted);
-            padding: 0.25rem 0.6rem;
-            border-radius: var(--radius-sm);
-            font-size: 0.8rem;
-            font-weight: 500;
-            border: 1px solid var(--border);
-        }
-        .edit-btn {
-            padding: 0.5rem 1rem;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border);
-            background: var(--surface-elevated);
-            color: var(--foreground);
-            cursor: pointer;
-            transition: all var(--transition-fast);
-        }
-        .edit-btn:hover {
-            background: var(--background-muted);
-        }
-        .user-management-grid {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 2rem;
-            align-items: start;
-        }
-        .permissions-modal-body {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-        }
-        .permissions-team-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 0.75rem;
-            max-height: 250px;
-            overflow-y: auto;
-            background-color: var(--background);
-            padding: 1rem;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border);
-        }
-        .permissions-team-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .permissions-team-item input[type="checkbox"] {
-            width: 1rem;
-            height: 1rem;
-        }
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.75rem;
-            margin-top: 1.5rem;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border);
-        }
-        @media (max-width: 768px) {
-            .user-management-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/assets/admin.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div id="page-header-actions">
-        <button id="theme-toggle-btn" class="theme-toggle" title="Toggle Theme">
-            <svg class="theme-icon" width="20" height="20" viewBox="0 0 24 24">
-                <path fill="currentColor" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
-            </svg>
-        </button>
-        
-        <div class="profile-dropdown-container">
-            <button id="profile-btn" class="theme-toggle" title="Profile">
-                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4Z"/></svg>
-            </button>
-            <div id="profile-dropdown" class="profile-dropdown">
-                <div class="profile-details">
-                    <strong>Welcome, <span id="profile-username">User</span></strong>
-                    <span id="profile-role" class="user-role">user</span>
-                </div>
-                <a href="/logout" class="dropdown-item">
-                   <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9Z"/></svg>
-                   Logout
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <div class="admin-container">
-        <header class="admin-header">
+    <header class="admin-header">
+        <div class="admin-header-left">
             <h1>Admin Panel</h1>
-            <a href="/" class="back-button">
-                <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8l8 8l1.41-1.41L7.83 13H20v-2z"/></svg>
-                Back to Chat
-            </a>
-        </header>
-
-        <div class="tabs">
-            <button class="tab-button active" data-tab="user-management">User Management</button>
-            <button class="tab-button" data-tab="document-management">Document Management</button>
         </div>
-
-        <div id="user-management" class="tab-content active">
-            <div class="user-management-grid">
-                <div class="admin-form-container">
-                    <h3>Create New User</h3>
-                    <form id="create-user-form" autocomplete="off">
-                        <div class="form-group">
-                            <label for="new-username">Username</label>
-                            <input type="text" id="new-username" class="textbox" required placeholder="Enter a unique username">
+        <div class="admin-header-right">
+            <a href="/" class="back-button icon-button">
+                <svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/></svg>
+                <span>Back to Chat</span>
+            </a>
+            <div id="page-header-actions">
+                <button id="theme-toggle-btn" class="theme-toggle" title="Toggle Theme">
+                    <svg class="theme-icon" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                </button>
+                <div class="profile-dropdown-container">
+                    <button id="profile-btn" class="theme-toggle" title="Profile">
+                        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4a4 4 0 0 1 4 4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4m0 10c4.42 0 8 1.79 8 4v2H4v-2c0-2.21 3.58-4 8-4Z"/></svg>
+                    </button>
+                    <div id="profile-dropdown" class="profile-dropdown">
+                        <div class="profile-details">
+                            <strong>Welcome, <span id="profile-username">Admin</span></strong>
+                            <span id="profile-role" class="user-role admin">admin</span>
                         </div>
-                        <div class="form-group">
-                            <label for="new-password">Password</label>
-                            <input type="password" id="new-password" class="textbox" required placeholder="Create a strong password" autocomplete="new-password">
-                        </div>
-                        <div class="form-group">
-                            <label for="new-user-role">Role</label>
-                            <select id="new-user-role" class="textbox">
-                                <option value="user">User</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="new-user-team">Team</label>
-                            <select id="new-user-team" class="textbox">
-                                <!-- Options populated by JS -->
-                            </select>
-                        </div>
-                        <button type="submit" class="icon-button" style="width: 100%; background: var(--primary); color: var(--primary-foreground);">Create User</button>
-                    </form>
-                    <div id="create-user-status" class="upload-status" style="margin-top: 0.5rem;"></div>
-                </div>
-                <div class="user-list-section">
-                    <h3>Existing Users</h3>
-                    <div class="file-list-container" style="max-height: 60vh;">
-                        <ul id="user-list" class="file-list"></ul>
+                        <a href="/logout" class="dropdown-item"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M16 17v-3H9v-4h7V7l5 5-5 5M14 2a2 2 0 0 1 2 2v2h-2V4H5v16h9v-2h2v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9Z"/></svg>Logout</a>
                     </div>
                 </div>
             </div>
         </div>
+    </header>
 
-        <div id="document-management" class="tab-content">
-            <h2>Document Permissions</h2>
-            <div class="file-list-container" style="max-height: 60vh;">
-                <table id="document-management-table">
-                    <thead>
-                        <tr>
-                            <th>Document Name</th>
-                            <th>Permitted Teams</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            <div id="doc-mgmt-status" class="upload-status" style="margin-top: 1rem;"></div>
+    <main class="admin-container">
+        <div class="admin-tabs">
+            <button id="user-management-tab" class="admin-tab active">User Management</button>
+            <button id="doc-management-tab" class="admin-tab">Document Management</button>
         </div>
-    </div>
+
+        <!-- User Management Content -->
+        <div id="user-management-content" class="tab-pane active">
+            <div class="admin-card">
+                <h3>Create New User</h3>
+                <form id="create-user-form" class="admin-form-container">
+                    <div class="form-group">
+                        <label for="new-username">Username</label>
+                        <input type="text" id="new-username" class="textbox" placeholder="e.g., john.doe" autocomplete="off" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-password">Password</label>
+                        <input type="password" id="new-password" class="textbox" placeholder="Enter a secure password" autocomplete="new-password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-user-role">Role</label>
+                        <select id="new-user-role" class="textbox">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="new-user-team">Team</label>
+                        <select id="new-user-team" class="textbox"></select>
+                    </div>
+                    <button type="submit" class="icon-button form-submit-btn">Create User</button>
+                </form>
+                <div id="create-user-status" class="upload-status"></div>
+            </div>
+            <div class="admin-card">
+                <h3>Existing Users</h3>
+                <ul id="user-list" class="user-list">
+                    <!-- Users will be dynamically inserted here -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- Document Management Content -->
+        <div id="doc-management-content" class="tab-pane">
+            <div class="admin-card">
+                <h3>Document Permissions</h3>
+                <p class="form-hint">Edit which teams can access each ingested document.</p>
+                <div class="doc-table-container">
+                    <table class="doc-table">
+                        <thead>
+                            <tr>
+                                <th>File Name</th>
+                                <th>Permitted Teams</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="doc-list">
+                            <!-- Document list will be dynamically inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <!-- Permissions Modal -->
     <div id="permissions-modal" class="modal-backdrop hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="permissions-modal-title">Edit Permissions</h2>
+                <h2>Edit Permissions for <span id="modal-doc-name" style="font-weight: 700;"></span></h2>
                 <button id="permissions-modal-close-btn" class="theme-toggle">&times;</button>
             </div>
-            <div class="permissions-modal-body">
-                <p>Select which teams can access this document.</p>
-                <div id="permissions-team-list" class="permissions-team-list">
-                    <!-- Checkboxes will be populated by JavaScript -->
+            <div class="modal-body">
+                <p class="form-hint" style="margin-top: 0; margin-bottom: 1rem;">Move teams between lists to grant or revoke access.</p>
+                <div class="team-selector-container">
+                    <div class="team-list-box">
+                        <h4>Available Teams</h4>
+                        <ul id="available-teams-list-modal" class="team-list"></ul>
+                    </div>
+                    <div class="team-list-box">
+                        <h4>Assigned Teams</h4>
+                        <ul id="assigned-teams-list-modal" class="team-list"></ul>
+                    </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button id="permissions-modal-cancel-btn" class="icon-button" style="width: 120px;">Cancel</button>
-                <button id="permissions-modal-save-btn" class="icon-button" style="width: 120px; background: var(--primary); color: var(--primary-foreground);">Save</button>
+                <div class="modal-actions">
+                    <button id="cancel-permissions-btn" class="icon-button">Cancel</button>
+                    <button id="save-permissions-btn" class="icon-button">Save Changes</button>
+                </div>
             </div>
         </div>
     </div>

@@ -498,3 +498,20 @@ async def handle_delete_user(username: str, request: Request):
         logger.error(f"Error deleting user '{username}': {e}")
         raise HTTPException(status_code=500, detail="Internal server error while deleting user.")
 
+
+@api_router.get("/admin/documents", dependencies=[Depends(require_admin)])
+async def get_all_documents_with_permissions(ingest_service: "IngestService" = Depends(get_ingest_service)):
+    all_docs = ingest_service.list_ingested()
+    # Group docs by file name to handle multi-chunk files correctly
+    docs_by_filename = {}
+    for doc in all_docs:
+        if doc.doc_metadata and "file_name" in doc.doc_metadata:
+            filename = doc.doc_metadata["file_name"]
+            if filename not in docs_by_filename:
+                # For each unique filename, get the teams once.
+                # Assumes all chunks of a file have the same teams.
+                docs_by_filename[filename] = {
+                    "file_name": filename,
+                    "teams": get_document_teams(doc.doc_id)
+                }
+    return JSONResponse(content=list(docs_by_filename.values()))

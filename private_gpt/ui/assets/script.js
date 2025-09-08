@@ -34,7 +34,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileDropdown = document.getElementById('profile-dropdown');
     const profileUsername = document.getElementById('profile-username');
     const profileRole = document.getElementById('profile-role');
-    const adminPanelLink = document.getElementById('admin-panel-link');
     const profileSettingsLink = document.getElementById('profile-settings-link');
     const profileModal = document.getElementById('profile-modal');
     const profileModalCloseBtn = document.getElementById('profile-modal-close-btn');
@@ -56,7 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let maxSessionAge = 0;
     let currentUsername = null;
     let pendingFilesToUpload = null;
-    let allTeams = [];
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
@@ -160,7 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sessionElement) {
             chatTitle.textContent = sessionElement.textContent;
         }
-
 
         document.querySelectorAll('#chat-list .chat-session').forEach(li => {
             li.classList.toggle('active', li.dataset.sessionId === sessionId);
@@ -424,20 +421,30 @@ document.addEventListener('DOMContentLoaded', () => {
         header.nextElementSibling.classList.toggle('collapsed');
     };
 
+    async function openUploadModal() {
+        const teams = await fetchTeams();
+        setupTeamSelector(teams);
+        tagModal.classList.remove('hidden');
+    }
+
     function setupDragAndDrop() {
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             uploadZone.addEventListener(eventName, e => e.preventDefault());
         });
         uploadZone.addEventListener('dragover', () => uploadZone.classList.add('drag-over'));
         uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-        uploadZone.addEventListener('drop', e => {
+        uploadZone.addEventListener('drop', async e => {
             uploadZone.classList.remove('drag-over');
             if (e.dataTransfer.files.length > 0) {
                 pendingFilesToUpload = e.dataTransfer.files;
-                openTeamTagModal();
+                await openUploadModal();
             }
         });
-        uploadZone.addEventListener('click', () => { if (!isUploading) uploadInput.click(); });
+        uploadZone.addEventListener('click', async () => { 
+            if (!isUploading) {
+                uploadInput.click();
+            }
+        });
     }
 
     function manageTheme() {
@@ -467,7 +474,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.hidden-by-role').forEach(el => {
                     el.classList.remove('hidden-by-role');
                 });
-                await fetchAndStoreTeams();
             }
         } catch (error) {
             console.error('Error fetching user info:', error);
@@ -519,22 +525,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Dual-List Team Selector Logic ---
-    async function fetchAndStoreTeams() {
+    // --- Team Selector (Upload Modal) ---
+    async function fetchTeams() {
         try {
             const response = await fetch('/api/admin/teams');
             if (!response.ok) throw new Error('Failed to fetch teams');
-            allTeams = await response.json();
+            return await response.json();
         } catch (error) {
-            console.error('Error fetching teams list:', error);
-            allTeams = ['Default']; // Fallback
+            console.error('Error fetching teams:', error);
+            return ['Default']; // Fallback
         }
     }
 
-    function renderTeamSelector() {
+    function setupTeamSelector(teams) {
         availableTeamsList.innerHTML = '';
         selectedTeamsList.innerHTML = '';
-        allTeams.forEach(team => {
+        teams.forEach(team => {
             const li = document.createElement('li');
             li.className = 'team-list-item';
             li.textContent = team;
@@ -542,17 +548,11 @@ document.addEventListener('DOMContentLoaded', () => {
             availableTeamsList.appendChild(li);
         });
     }
-    
-    function openTeamTagModal() {
-        renderTeamSelector();
-        tagModal.classList.remove('hidden');
-    }
 
     function moveTeamItem(element, fromList, toList) {
         fromList.removeChild(element);
         toList.appendChild(element);
     }
-
 
     // --- Profile Settings Functions ---
     async function handleUpdateProfile(event) {
@@ -589,7 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- New Function to set App Name ---
+    // --- App Name Function ---
     async function fetchAndSetAppName() {
         try {
             const response = await fetch('/api/app-name');
@@ -597,25 +597,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             const appName = data.appName || 'DocuMind';
 
-            // Update Title
             document.title = `${appName} - AI-Powered Document Chat`;
-            
-            // Update Header in Sidebar
             const headerTitle = document.getElementById('app-header-title');
             if (headerTitle) headerTitle.textContent = appName;
-
-            // Update Welcome Message
             const welcomeHeader = document.getElementById('welcome-header');
             if (welcomeHeader) welcomeHeader.textContent = `Welcome to ${appName}`;
             
-            // Update Meta Descriptions
-            document.querySelector('meta[name="description"]').setAttribute('content', `Intelligent chatbot for document analysis and conversation. Upload files and get AI-powered insights with ${appName}.`);
-            document.querySelector('meta[name="author"]').setAttribute('content', appName);
-            document.querySelector('meta[name="keywords"]').setAttribute('content', `AI chatbot, document analysis, file upload, artificial intelligence, ${appName}`);
-            document.querySelector('meta[property="og:title"]').setAttribute('content', `${appName} - AI-Powered Document Chat`);
-            document.querySelector('meta[name="twitter:title"]').setAttribute('content', `${appName} - AI-Powered Document Chat`);
-
-
         } catch (error) {
             console.error('Error setting app name:', error);
         }
@@ -626,10 +613,10 @@ document.addEventListener('DOMContentLoaded', () => {
     chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
     chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
     
-    uploadInput.addEventListener('change', e => { 
+    uploadInput.addEventListener('change', async e => { 
         if (e.target.files.length > 0) {
             pendingFilesToUpload = e.target.files;
-            openTeamTagModal();
+            await openUploadModal();
         }
     });
 
@@ -662,7 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 profileModal.classList.add('hidden');
                 tagModal.classList.add('hidden');
                 pendingFilesToUpload = null;
-                uploadInput.value = ''; // Reset file input
+                uploadInput._value = '';
             });
         }
     });
@@ -674,7 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     modal.classList.add('hidden');
                     if (modal === tagModal) {
                         pendingFilesToUpload = null;
-                        uploadInput.value = ''; // Reset file input
+                        uploadInput.value = '';
                     }
                 }
             });
@@ -691,9 +678,9 @@ document.addEventListener('DOMContentLoaded', () => {
         confirmUploadBtn.addEventListener('click', () => {
             const selectedTeamElements = selectedTeamsList.querySelectorAll('.team-list-item');
             const selectedTeams = Array.from(selectedTeamElements).map(el => el.dataset.team);
-            
+
             if (selectedTeams.length === 0) {
-                showStatus('Please select at least one team.', 'error');
+                showStatus('Please select at least one team.', 'error', document.getElementById('tag-modal').querySelector('.upload-status'));
                 return;
             }
             if (pendingFilesToUpload) {
