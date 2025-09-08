@@ -55,8 +55,8 @@
         </div>
     </div>
     <div id="main-container">
-        <!-- Sidebar -->
-        <aside class="sidebar glass-panel">
+        <!-- Sidebar Column 1: Settings & File Management -->
+        <aside class="sidebar-primary glass-panel">
             <div id="sidebar-header">
                 <div class="logo-container">
                     <div class="logo-icon">
@@ -124,28 +124,6 @@
                 </div>
             </section>
             
-			<!-- Chat tabs -->
-			<section class="accordion" id="chat-sessions-section">
-				<h2 class="accordion-header" onclick="toggleAccordion(this)">
-					<span>💬 Chat Sessions</span>
-					<svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24">
-						<path fill="currentColor" d="m7 10 5 5 5-5z"/>
-					</svg>
-				</h2>
-				<div class="accordion-content">
-					<button id="new-chat-btn" class="icon-button" style="width: 100%; justify-content: flex-start; gap: 0.5rem;">
-						<svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-						New Chat
-					</button>
-					<div class="file-list-container" style="margin-top: 0.5rem;">
-						<ul id="chat-list" class="file-list">
-							<!-- Chat tabs will be dynamically inserted here -->
-						</ul>
-					</div>
-				</div>
-			</section>
-			
-			
             <!-- Chat Settings Section -->
             <section class="accordion hidden-by-role" id="chat-settings-section">
                 <h2 class="accordion-header" onclick="toggleAccordion(this)">
@@ -161,6 +139,21 @@
                     </div>
                 </div>
             </section>
+        </aside>
+        
+        <!-- Sidebar Column 2: Chat Sessions -->
+        <aside class="sidebar-secondary">
+            <div class="chat-sessions-header">
+                <h3>Chat Sessions</h3>
+                <button id="new-chat-btn" class="icon-button" title="New Chat">
+                    <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                </button>
+            </div>
+            <div class="file-list-container">
+                <ul id="chat-list" class="file-list">
+                    <!-- Chat tabs will be dynamically inserted here -->
+                </ul>
+            </div>
         </aside>
 
         <!-- Main Chat Area -->
@@ -192,55 +185,6 @@
                 </div>
             </div>
         </main>
-    </div>
-
-    <!-- Admin Modal -->
-    <div id="admin-modal" class="modal-backdrop hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>👑 Admin Panel</h2>
-                <button id="admin-modal-close-btn" class="theme-toggle">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="admin-form-container">
-                    <h3>Create New User</h3>
-                    <form id="create-user-form">
-                        <div class="form-group">
-                            <label for="new-username">Username</label>
-                            <input type="text" id="new-username" class="textbox" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="new-password">Password</label>
-                            <input type="password" id="new-password" class="textbox" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="new-user-role">Role</label>
-                            <select id="new-user-role" class="textbox">
-                                <option value="user">User</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="new-user-team">Team</label>
-                            <select id="new-user-team" class="textbox">
-                                <!-- Options populated by JS -->
-                            </select>
-                        </div>
-                        <button type="submit" id="create-user-btn" class="icon-button" style="width: 100%; background: var(--primary); color: var(--primary-foreground);">Create User</button>
-                    </form>
-                    <div id="create-user-status" class="upload-status" style="margin-top: 0.5rem;"></div>
-                </div>
-
-                <div class="user-list-section" style="margin-top: 1.5rem;">
-                    <h3>Existing Users</h3>
-                    <div class="file-list-container">
-                        <ul id="user-list" class="file-list">
-                            <!-- Users will be dynamically inserted here -->
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
     <!-- Profile Settings Modal -->
@@ -298,5 +242,4 @@
     <script src="/assets/script.js"></script>
 </body>
 </html>
-
 

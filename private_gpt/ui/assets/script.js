@@ -20,15 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatList = document.getElementById('chat-list');
     const newChatBtn = document.getElementById('new-chat-btn');
     
-    // Admin Modal Elements
-    const createUserForm = document.getElementById('create-user-form');
-    const newUsernameInput = document.getElementById('new-username');
-    const newPasswordInput = document.getElementById('new-password');
-    const newUserRoleSelect = document.getElementById('new-user-role');
-    const newUserTeamSelect = document.getElementById('new-user-team');
-    const createUserStatus = document.getElementById('create-user-status');
-    const userList = document.getElementById('user-list');
-
     // Tagging Modal Elements
     const tagModal = document.getElementById('tag-modal');
     const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
@@ -42,8 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileUsername = document.getElementById('profile-username');
     const profileRole = document.getElementById('profile-role');
     const adminPanelLink = document.getElementById('admin-panel-link');
-    const adminModal = document.getElementById('admin-modal');
-    const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
     const profileSettingsLink = document.getElementById('profile-settings-link');
     const profileModal = document.getElementById('profile-modal');
     const profileModalCloseBtn = document.getElementById('profile-modal-close-btn');
@@ -402,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!selectedFile || !confirm(`Are you sure you want to delete ${selectedFileText.value}?`)) return;
         try {
             showStatus('Deleting file...', 'loading');
-            const response = await fetch(`/api/files/${selectedFile}`, { method: 'DELETE' });
+            const response = await fetch(`/api/files/${selectedFileText.value}`, { method: 'DELETE' });
             if (response.ok) {
                 await refreshFileList();
                 deselectFile();
@@ -463,7 +452,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.hidden-by-role').forEach(el => {
                     el.classList.remove('hidden-by-role');
                 });
-                await refreshUserList();
                 await populateTeamsDropdown();
             }
         } catch (error) {
@@ -517,120 +505,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Admin Panel Functions ---
+    // --- Admin-related (Upload Modal) ---
     async function populateTeamsDropdown() {
-        if (!newUserTeamSelect && !uploadTeamTagsSelect) return;
+        if (!uploadTeamTagsSelect) return;
         try {
             const response = await fetch('/api/admin/teams');
             if (!response.ok) throw new Error('Failed to fetch teams');
             const teams = await response.json();
             
-            if (newUserTeamSelect) newUserTeamSelect.innerHTML = '';
-            if (uploadTeamTagsSelect) uploadTeamTagsSelect.innerHTML = '';
-
+            uploadTeamTagsSelect.innerHTML = '';
             teams.forEach(team => {
                 const option = document.createElement('option');
                 option.value = team;
                 option.textContent = team;
-                if (newUserTeamSelect) newUserTeamSelect.appendChild(option.cloneNode(true));
-                if (uploadTeamTagsSelect) uploadTeamTagsSelect.appendChild(option);
+                uploadTeamTagsSelect.appendChild(option);
             });
         } catch (error) {
             console.error('Error populating teams dropdown:', error);
-            if (newUserTeamSelect) newUserTeamSelect.innerHTML = '<option value="Default">Default</option>';
-            if (uploadTeamTagsSelect) uploadTeamTagsSelect.innerHTML = '<option value="Default">Default</option>';
-        }
-    }
-
-    async function refreshUserList() {
-        try {
-            const response = await fetch('/api/admin/users');
-            if (!response.ok) {
-                throw new Error(`Failed to fetch users: ${response.statusText}`);
-            }
-            const users = await response.json();
-            userList.innerHTML = '';
-            users.forEach(user => {
-                const li = document.createElement('li');
-                const isDeletable = user.username !== 'admin' && user.username !== currentUsername;
-
-                li.innerHTML = `
-                    <div class="user-details-container">
-                        <div class="user-info">
-                            <span>${user.username}</span>
-                            <span class="user-team">${user.team || 'No Team'}</span>
-                        </div>
-                        <span class="user-role ${user.role}">${user.role}</span>
-                    </div>
-                    <button class="delete-user-btn" data-username="${user.username}" title="Delete User" ${!isDeletable ? 'disabled' : ''}>
-                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
-                    </button>
-                `;
-                userList.appendChild(li);
-            });
-        } catch (error) {
-            console.error('Error refreshing user list:', error);
-            showStatus('Could not load user list', 'error', createUserStatus);
-        }
-    }
-
-    async function handleCreateUser(event) {
-        event.preventDefault();
-        const username = newUsernameInput.value.trim();
-        const password = newPasswordInput.value.trim();
-        const role = newUserRoleSelect.value;
-        const team = newUserTeamSelect.value;
-
-        if (!username || !password) {
-            showStatus('Username and password are required.', 'error', createUserStatus);
-            return;
-        }
-
-        try {
-            showStatus('Creating user...', 'loading', createUserStatus);
-            const response = await fetch('/api/admin/create-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, role, team }),
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                showStatus(result.message, 'success', createUserStatus);
-                createUserForm.reset();
-                await refreshUserList();
-            } else {
-                throw new Error(result.detail || 'Failed to create user.');
-            }
-        } catch (error) {
-            console.error('Error creating user:', error);
-            showStatus(error.message, 'error', createUserStatus);
-        }
-    }
-
-    async function handleDeleteUser(username) {
-        if (!confirm(`Are you sure you want to permanently delete the user '${username}'? This action cannot be undone.`)) {
-            return;
-        }
-
-        try {
-            showStatus('Deleting user...', 'loading', createUserStatus);
-            const response = await fetch(`/api/admin/users/${username}`, {
-                method: 'DELETE',
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                showStatus(result.message, 'success', createUserStatus);
-                await refreshUserList();
-            } else {
-                throw new Error(result.detail || 'Failed to delete user.');
-            }
-        } catch (error) {
-            console.error('Error deleting user:', error);
-            showStatus(error.message, 'error', createUserStatus);
+            uploadTeamTagsSelect.innerHTML = '<option value="Default">Default</option>';
         }
     }
 
@@ -721,15 +613,12 @@ document.addEventListener('DOMContentLoaded', () => {
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
     
     // Modals and Dropdowns
-    if (createUserForm) createUserForm.addEventListener('submit', handleCreateUser);
     if (profileSettingsForm) profileSettingsForm.addEventListener('submit', handleUpdateProfile);
     
     profileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         profileDropdown.classList.toggle('show');
     });
-
-
 
     if(profileSettingsLink) {
         profileSettingsLink.addEventListener('click', (e) => {
@@ -739,10 +628,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    [adminModalCloseBtn, profileModalCloseBtn, tagModalCloseBtn, cancelUploadBtn].forEach(btn => {
+    [profileModalCloseBtn, tagModalCloseBtn, cancelUploadBtn].forEach(btn => {
         if(btn) {
             btn.addEventListener('click', () => {
-                adminModal.classList.add('hidden');
                 profileModal.classList.add('hidden');
                 tagModal.classList.add('hidden');
                 pendingFilesToUpload = null;
@@ -751,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    [adminModal, profileModal, tagModal].forEach(modal => {
+    [profileModal, tagModal].forEach(modal => {
         if(modal) {
             modal.addEventListener('click', (e) => {
                 if (e.target === modal) {
@@ -770,16 +658,6 @@ document.addEventListener('DOMContentLoaded', () => {
             profileDropdown.classList.remove('show');
         }
     });
-
-    if(userList) {
-        userList.addEventListener('click', (event) => {
-            const deleteButton = event.target.closest('.delete-user-btn');
-            if (deleteButton && !deleteButton.disabled) {
-                const username = deleteButton.dataset.username;
-                handleDeleteUser(username);
-            }
-        });
-    }
     
     if (confirmUploadBtn) {
         confirmUploadBtn.addEventListener('click', () => {
@@ -789,7 +667,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             if (pendingFilesToUpload) {
-                // This is the only change: close the modal immediately.
                 tagModal.classList.add('hidden');
                 handleFileUpload(pendingFilesToUpload, selectedTeams);
             }
