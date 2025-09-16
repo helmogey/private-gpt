@@ -125,22 +125,22 @@ body.dark {
 }
 
 #sidebar-header { display: flex; align-items: center; margin-bottom: 0.5rem; }
-.logo-container { display: flex; align-items: center; gap: 0.75rem; }
+.logo-container { display: flex; align-items: center; gap: 1px; }
 
 .logo-icon {
     display: flex;
     align-items: center;
     justify-content: center;
     background-color: transparent; 
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 6rem;
+    height: 6rem;
 }
 
 .logo-icon img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3)); 
+    /* Removed drop-shadow for a flatter, more integrated look */
 }
 
 .fancy-header-text { font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
@@ -262,24 +262,20 @@ body.dark {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 1rem;
+    gap: 1px;
 }
 .welcome-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 4.5rem;
-    height: 4.5rem;
-    /* Removing styles that don't belong on the container */
+    width: 10rem;
+    height: 10rem;
 }
 .welcome-icon img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3));
-    border-radius: 50%;
-    box-shadow: var(--shadow-glow);
-    animation: glow 2s ease-in-out infinite;
+    /* Removed all styles that create a frame or layer effect */
 }
 #welcome-header {
     font-size: 2rem;

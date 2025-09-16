@@ -79,12 +79,10 @@
             animation: fadeIn 0.8s ease-out forwards;
         }
         
-        /* --- FIX: Using the corner-spin technique for a consistent beam effect --- */
         .login-container::before,
         .login-container::after {
             content: '';
             position: absolute;
-            /* REMOVED z-index to allow content wrapper to sit on top */
             top: -50%;
             left: -50%;
             width: 400px;
@@ -102,7 +100,6 @@
            animation-delay: -3s; /* Offset the second beam */
         }
         
-        /* This wrapper holds the actual content, masking the gradient behind it */
         .login-content-wrapper {
             position: absolute;
             inset: 3px; /* This creates the border thickness */
@@ -111,19 +108,34 @@
             z-index: 1; /* Sits on top of the rotating gradients */
             padding: 40px;
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
-
-        .logo-container {
-            margin-bottom: 24px;
+        .welcome-greeting {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 16px;
         }
 
-        .logo-container img {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            border: 2px solid var(--primary-color);
-            padding: 4px;
+        .branding-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap:1px;
+            margin-bottom: 16px;
+        }
+
+        .branding-container img {
+            width: 70px;
+            height: 70px;
+            mix-blend-mode: screen; /* This is the key change to remove the white background */
+        }
+
+        .branding-container .app-name {
+            font-size: 2rem;
+            font-weight: 700;
         }
 
         h1 {
@@ -213,15 +225,14 @@
 <body>
     <canvas id="particle-canvas"></canvas>
     
-    <!-- This container is now the shell for the animation -->
     <div class="login-container">
-        <!-- This new wrapper holds all the content to keep it separate from the animation layers -->
         <div class="login-content-wrapper">
-            <div class="logo-container">
-                <img src="{{ app_logo_url }}" alt="Logo" class="login-logo">
-			</div>
-            <h1>Welcome Back</h1>
-            <p class="subtitle">Log in to your {{ app_name }} account</p>
+            <h2 class="welcome-greeting">Welcome To</h2>
+            <div class="branding-container">
+                <img src="{{ app_logo_url }}" alt="Logo">
+                <span class="app-name">{{ app_name }}</span>
+            </div>
+            <p class="subtitle">Log in to your account</p>
             
             <form class="login-form" method="post" action="/login">
                 <div class="input-group">

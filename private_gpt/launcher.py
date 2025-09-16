@@ -74,7 +74,7 @@ def create_app(root_injector: Injector) -> FastAPI:
     @app.get("/login", response_class=HTMLResponse, tags=["UI"])
     async def get_login_page(request: Request):
         app_name = os.getenv("APP_NAME", "DocuMind")
-        app_logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg") 
+        app_logo_url = os.getenv("APP_LOGO_URL_Black", "/assets/NEC-Logo.svg") 
         return templates.TemplateResponse("login.html", {"request": request, "app_name": app_name, "app_logo_url": app_logo_url})
         
 
@@ -92,7 +92,8 @@ def create_app(root_injector: Injector) -> FastAPI:
             return RedirectResponse(url="/", status_code=303)
         else:
             app_name = os.getenv("APP_NAME", "DocuMind")
-            app_logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg")
+            app_logo_url = os.getenv("APP_LOGO_URL_Black", "/assets/NEC-Logo.svg")
+
         return templates.TemplateResponse(
             "login.html",
             {
