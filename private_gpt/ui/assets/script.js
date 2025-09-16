@@ -590,24 +590,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- App Name Function ---
-    async function fetchAndSetAppName() {
+	async function fetchAndSetBranding() {
         try {
-            const response = await fetch('/api/app-name');
-            if (!response.ok) throw new Error('Failed to fetch app name.');
+            const response = await fetch('/api/branding');
+            if (!response.ok) throw new Error('Failed to fetch branding info.');
             const data = await response.json();
             const appName = data.appName || 'DocuMind';
+            const logoUrl = data.logoUrl || '/assets/NEC-Logo.svg';
 
+            // --- Find the empty containers from index.html ---
+            const logoIconContainer = document.getElementById('logo-icon-container');
+            const welcomeIconContainer = document.getElementById('welcome-icon-container');
+            const favicon = document.getElementById('favicon');
+            
+            // Update page title and text elements
             document.title = `${appName} - AI-Powered Document Chat`;
-            const headerTitle = document.getElementById('app-header-title');
-            if (headerTitle) headerTitle.textContent = appName;
-            const welcomeHeader = document.getElementById('welcome-header');
-            if (welcomeHeader) welcomeHeader.textContent = `Welcome to ${appName}`;
+            document.getElementById('app-header-title').textContent = appName;
+            document.getElementById('welcome-header').textContent = `Welcome to`;
+            // This is the new line to update the app name in the welcome message
+            document.getElementById('welcome-app-name').textContent = appName;
+            
+            // --- Update the Favicon (Tab Icon) ---
+            if (favicon) {
+                favicon.href = logoUrl;
+            }
+
+            // --- Create and insert the Header Logo ---
+            if (logoIconContainer) {
+                const logoImg = document.createElement('img');
+                logoImg.src = logoUrl;
+                logoImg.alt = `${appName} Logo`;
+                logoIconContainer.innerHTML = ''; // Clear the container first
+                logoIconContainer.appendChild(logoImg);
+            }
+
+            // --- Create and insert the Welcome Message Logo ---
+            if (welcomeIconContainer) {
+                const welcomeLogoImg = document.createElement('img');
+                welcomeLogoImg.src = logoUrl;
+                welcomeLogoImg.alt = `${appName} Logo`;
+                welcomeIconContainer.innerHTML = ''; // Clear the container first
+                welcomeIconContainer.appendChild(welcomeLogoImg);
+            }
             
         } catch (error) {
-            console.error('Error setting app name:', error);
+            console.error('Error setting app branding:', error);
         }
     }
-
+    
     // --- Event Listeners ---
     sendBtn.addEventListener('click', sendMessage);
     chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
@@ -711,6 +741,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchUserInfo();
     setupSessionTimeout();
     loadInitialChat();
-    fetchAndSetAppName();
+    fetchAndSetBranding();
 });
 

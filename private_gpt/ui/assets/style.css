@@ -126,8 +126,23 @@ body.dark {
 
 #sidebar-header { display: flex; align-items: center; margin-bottom: 0.5rem; }
 .logo-container { display: flex; align-items: center; gap: 0.75rem; }
-.logo-icon { width: 4rem; height: 4rem; border-radius: var(--radius-lg); background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; color: var(--primary-foreground); box-shadow: var(--shadow-glow); }
-.welcome-icon img { width: 3rem; height: 3rem; }
+
+.logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent; 
+    width: 3.5rem;
+    height: 3.5rem;
+}
+
+.logo-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3)); 
+}
+
 .fancy-header-text { font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
 .theme-toggle { background: transparent; border: none; color: var(--foreground-muted); cursor: pointer; padding: 0.5rem; border-radius: var(--radius-md); transition: all var(--transition-fast); }
 .theme-toggle:hover { background: var(--background-muted); color: var(--foreground); transform: scale(1.1); }
@@ -195,11 +210,6 @@ body.dark {
 }
 
 #chatbot { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
-.welcome-message { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; gap: 1rem; }
-.welcome-icon { width: 10rem; height: 10rem; border-radius: 50%; background: var(--gradient-primary); display: flex; align-items: center; justify-content: center; color: var(--primary-foreground); box-shadow: var(--shadow-glow); animation: glow 2s ease-in-out infinite; }
-.welcome-icon img { width: 8rem; height: 8rem; }
-.welcome-message h2 { font-size: 2rem; font-weight: 700; color: var(--foreground); }
-.welcome-message p { color: var(--foreground-muted); font-size: 1.125rem; }
 .message-bubble { display: flex; gap: 0.75rem; animation: fadeInUp 0.3s ease-out; max-width: 85%; position: relative; }
 .message-bubble.user { flex-direction: row-reverse; align-self: flex-end; }
 .message-avatar { width: 2rem; height: 2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 0.25rem; }
@@ -237,6 +247,55 @@ body.dark {
 .loading-spinner { width: 1.25rem; height: 1.25rem; border: 2px solid transparent; border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite; opacity: 0; position: absolute; transition: opacity var(--transition-fast); }
 #send-btn.loading .send-icon { opacity: 0; }
 #send-btn.loading .loading-spinner { opacity: 1; }
+
+/* --- 4a. WELCOME MESSAGE STYLES --- */
+.welcome-message { 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    height: 100%; 
+    text-align: center; 
+    gap: 1rem; 
+}
+.welcome-branding-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+.welcome-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    /* Removing styles that don't belong on the container */
+}
+.welcome-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.3));
+    border-radius: 50%;
+    box-shadow: var(--shadow-glow);
+    animation: glow 2s ease-in-out infinite;
+}
+#welcome-header {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--foreground);
+    margin-bottom: -0.5rem; /* Pulls the branding container up a bit */
+}
+#welcome-app-name {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--foreground);
+}
+.welcome-message p { 
+    color: var(--foreground-muted); 
+    font-size: 1.125rem; 
+}
 
 /* Animations */
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(1.25rem); } to { opacity: 1; transform: translateY(0); } }

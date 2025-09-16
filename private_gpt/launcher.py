@@ -23,7 +23,7 @@ from private_gpt.database import init_db, get_user, verify_password
 
 logger = logging.getLogger(__name__)
 
-templates = Jinja2Templates(directory=str(PROJECT_ROOT_PATH / "templates"))
+templates = Jinja2Templates(directory=str(PROJECT_ROOT_PATH / "private_gpt" / "ui" / "assets"))
 
 
 SESSION_MAX_AGE = 600
@@ -74,7 +74,8 @@ def create_app(root_injector: Injector) -> FastAPI:
     @app.get("/login", response_class=HTMLResponse, tags=["UI"])
     async def get_login_page(request: Request):
         app_name = os.getenv("APP_NAME", "DocuMind")
-        return templates.TemplateResponse("login.html", {"request": request, "app_name": app_name})
+        app_logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg") 
+        return templates.TemplateResponse("login.html", {"request": request, "app_name": app_name, "app_logo_url": app_logo_url})
         
 
     @app.post("/login", tags=["UI"])
@@ -91,11 +92,17 @@ def create_app(root_injector: Injector) -> FastAPI:
             return RedirectResponse(url="/", status_code=303)
         else:
             app_name = os.getenv("APP_NAME", "DocuMind")
-            return templates.TemplateResponse(
-                "login.html",
-                {"request": request, "error": "Invalid username or password", "app_name": app_name},
-                status_code=401,
-            )
+            app_logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg")
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request, 
+                "error": "Invalid username or password", 
+                "app_name": app_name,
+                "app_logo_url": app_logo_url
+            },
+            status_code=401,
+        )
 
     @app.get("/logout", tags=["UI"])
     async def handle_logout(request: Request):

@@ -38,11 +38,19 @@ SESSION_MAX_AGE = 600
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
-@api_router.get("/app-name")
-def get_app_name():
-    """Provides the application name from environment variables."""
+# @api_router.get("/app-name")
+# def get_app_name():
+#     """Provides the application name from environment variables."""
+#     app_name = os.getenv("APP_NAME", "DocuMind")
+#     return JSONResponse(content={"appName": app_name})
+
+
+@api_router.get("/branding")
+def get_branding_info():
+    """Provides the application name and logo URL from environment variables."""
     app_name = os.getenv("APP_NAME", "DocuMind")
-    return JSONResponse(content={"appName": app_name})
+    logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg")
+    return JSONResponse(content={"appName": app_name, "logoUrl": logo_url})
 
 class Modes(str, Enum):
     RAG_MODE = "RAG"

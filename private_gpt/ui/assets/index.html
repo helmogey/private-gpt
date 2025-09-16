@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DocuMind - AI-Powered Document Chat</title>
+    <link rel="icon" id="favicon" href="">
     <link rel="stylesheet" href="/assets/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,8 +16,8 @@
         <aside class="sidebar-primary">
             <div id="sidebar-header">
                 <div class="logo-container">
-                    <div class="logo-icon"><img src="/assets/NEC-Logo.svg" alt="Logo"></div>
-                    <h1 id="app-header-title" class="fancy-header-text">DocuMind</h1>
+                    <div class="logo-icon" id="logo-icon-container"></div>
+                    <h1 id="app-header-title" class="fancy-header-text"></h1>
                 </div>
             </div>
 
@@ -36,7 +37,7 @@
                                 <p class="upload-text">
                                     <span class="upload-primary">Upload File(s)</span>
                                     <span class="upload-secondary">Click or drag files here</span>
-                                </p>
+                                 </p>
                                 <div class="upload-progress" id="upload-progress">
                                     <div class="upload-progress-bar" id="upload-progress-bar"></div>
                                 </div>
@@ -113,8 +114,11 @@
             </div>
             <div id="chatbot">
                 <div class="welcome-message" id="welcome-message">
-                    <div class="welcome-icon"><img src="/assets/NEC-Logo.svg" alt="Logo"></div>
-                    <h2 id="welcome-header">Welcome to DocuMind</h2>
+                    <h2 id="welcome-header"></h2>
+                    <div class="welcome-branding-container">
+                        <div class="welcome-icon" id="welcome-icon-container"></div>
+                        <h2 id="welcome-app-name"></h2>
+                    </div>
                     <p>Start a conversation by typing a message below.</p>
                 </div>
             </div>
@@ -181,3 +185,4 @@
     <script src="/assets/script.js"></script>
 </body>
 </html>
+
