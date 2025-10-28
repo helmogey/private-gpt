@@ -18,7 +18,9 @@
     --input-bg-light: hsl(240, 5.9%, 93%);
     --shadow-color-light: hsla(240, 10%, 3.9%, 0.1);
     --gradient-glass-light: linear-gradient(145deg, hsla(0, 0%, 100%, 0.9), hsla(0, 0%, 100%, 0.7));
-
+	
+	--secondary-color: #1414A0;
+	
     /* Dark Theme Palette */
     --primary-dark: hsl(262, 83%, 65%);
     --primary-glow-dark: hsl(262, 83%, 75%);
@@ -143,7 +145,7 @@ body.dark {
     /* Removed drop-shadow for a flatter, more integrated look */
 }
 
-.fancy-header-text { font-size: 1.5rem; font-weight: 700; color: var(--foreground); }
+.fancy-header-text { font-size: 1.5rem; font-weight: 700; color: var(--secondary-color); }
 .theme-toggle { background: transparent; border: none; color: var(--foreground-muted); cursor: pointer; padding: 0.5rem; border-radius: var(--radius-md); transition: all var(--transition-fast); }
 .theme-toggle:hover { background: var(--background-muted); color: var(--foreground); transform: scale(1.1); }
 
@@ -286,7 +288,8 @@ body.dark {
 #welcome-app-name {
     font-size: 2.5rem;
     font-weight: 700;
-    color: var(--foreground);
+    color: var(--secondary-color);
+    /* color: var(--foreground); */
 }
 .welcome-message p { 
     color: var(--foreground-muted); 

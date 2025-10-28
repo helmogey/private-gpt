@@ -12,7 +12,7 @@
             --background-end: #1F2937;
             --form-bg-color: #1c1c1c; /* Darker solid background for contrast */
             --primary-color: #8B5CF6;
-            --secondary-color: #3b82f6;
+            --secondary-color: #1414A0;
             --primary-color-hover: #7C3AED;
             --text-color: #F9FAFB;
             --text-color-muted: #9CA3AF;
@@ -103,7 +103,8 @@
         .login-content-wrapper {
             position: absolute;
             inset: 3px; /* This creates the border thickness */
-            background: var(--form-bg-color);
+            /* background: var(--form-bg-color); */
+            background: #FFFFFF;
             border-radius: 17px; /* Slightly smaller than parent */
             z-index: 1; /* Sits on top of the rotating gradients */
             padding: 40px;
@@ -111,6 +112,7 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
+            color: #111827;
         }
 
         .welcome-greeting {
@@ -127,15 +129,11 @@
             margin-bottom: 16px;
         }
 
-        .branding-container img {
-            width: 70px;
-            height: 70px;
-            mix-blend-mode: screen; /* This is the key change to remove the white background */
-        }
 
         .branding-container .app-name {
             font-size: 2rem;
             font-weight: 700;
+            color: var(--secondary-color);
         }
 
         h1 {
@@ -146,7 +144,7 @@
         }
 
         .subtitle {
-            color: var(--text-color-muted);
+            color: #6B7280;
             margin-bottom: 32px;
         }
 
@@ -159,7 +157,7 @@
             width: 100%;
             padding: 14px 16px;
             border-radius: 8px;
-            border: 1px solid var(--border-color);
+            border: 1px solid #D1D5DB;
             background-color: transparent;
             color: var(--text-color);
             font-size: 16px;
@@ -173,7 +171,7 @@
             color: var(--text-color-muted);
             pointer-events: none;
             transition: all 0.2s ease-in-out;
-            background-color: var(--form-bg-color); /* Match the container background */
+            background-color: #FFFFFF;
             padding: 0 4px;
         }
 
@@ -229,7 +227,6 @@
         <div class="login-content-wrapper">
             <h2 class="welcome-greeting">Welcome To</h2>
             <div class="branding-container">
-                <img src="{{ app_logo_url }}" alt="Logo">
                 <span class="app-name">{{ app_name }}</span>
             </div>
             <p class="subtitle">Log in to your account</p>
