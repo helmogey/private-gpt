@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - DocuMind</title>
-    <link rel="stylesheet" href="/assets/style.css">
+    <!-- Note: Make sure /assets/style.css contains the styles from admin.css -->
+    <link rel="stylesheet" href="/assets/style.css"> 
     <link rel="stylesheet" href="/assets/admin.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,7 +69,8 @@
                     </div>
                     <div class="form-group">
                         <label for="new-user-team">Team</label>
-                        <select id="new-user-team" class="textbox"></select>
+                        <p class="form-hint">Hold Ctrl/Cmd to select multiple teams.</p>
+                        <select id="new-user-team" class="textbox" multiple></select>
                     </div>
                     <button type="submit" class="icon-button form-submit-btn">Create User</button>
                 </form>
@@ -126,8 +128,63 @@
                 </div>
                 <div class="modal-actions">
                     <button id="cancel-permissions-btn" class="icon-button">Cancel</button>
-                    <button id="save-permissions-btn" class="icon-button">Save Changes</button>
+                    <button id="save-permissions-btn" class="icon-button form-submit-btn">Save Changes</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit User Modal (NEW) -->
+    <div id="edit-user-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit User: <span id="edit-username-display" style="font-weight: 700;"></span></h2>
+                <button id="edit-user-modal-close-btn" class="theme-toggle">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="admin-form-container">
+                    <div class="form-group">
+                        <label for="edit-user-role-select">Role</label>
+                        <select id="edit-user-role-select" class="textbox">
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-user-teams-select">Teams</label>
+                        <p class="form-hint">Hold Ctrl/Cmd to select multiple teams.</p>
+                        <select id="edit-user-teams-select" class="textbox" multiple></select>
+                    </div>
+                </form>
+                <div id="edit-user-status" class="upload-status" style="display: none;"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-edit-user-btn" class="icon-button">Cancel</button>
+                <button id="save-edit-user-btn" class="icon-button form-submit-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal (NEW) -->
+    <div id="reset-password-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Reset Password for <span id="reset-username-display" style="font-weight: 700;"></span></h2>
+                <button id="reset-password-modal-close-btn" class="theme-toggle">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="admin-form-container" onsubmit="return false;"> <!-- Prevent form submission on Enter -->
+                    <div class="form-group">
+                        <label for="new-default-password">New Password</label>
+                        <p class="form-hint">Set a new temporary password for the user.</p>
+                        <input type="password" id="new-default-password" class="textbox" placeholder="Enter new password" autocomplete="new-password">
+                    </div>
+                </form>
+                <div id="reset-password-status" class="upload-status" style="display: none;"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-reset-password-btn" class="icon-button">Cancel</button>
+                <button id="save-reset-password-btn" class="icon-button form-submit-btn">Reset Password</button>
             </div>
         </div>
     </div>

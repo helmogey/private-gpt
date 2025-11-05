@@ -136,6 +136,20 @@ body {
     gap: 1rem;
 }
 
+/* Style for multi-select boxes */
+select[multiple].textbox {
+    height: 120px;
+    padding: 0.5rem;
+}
+select[multiple].textbox option {
+    padding: 0.4rem;
+    border-radius: var(--radius-sm);
+}
+select[multiple].textbox option:checked {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+}
+
 .form-submit-btn {
     background: var(--primary);
     color: var(--primary-foreground);
@@ -200,6 +214,51 @@ body {
     color: var(--primary);
     font-weight: 600;
 }
+
+/* Edit user button style */
+.edit-user-btn {
+    background: transparent;
+    border: none;
+    color: var(--foreground-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.edit-user-btn:hover:not(:disabled) {
+    background: hsla(210, 80%, 50%, 0.1); /* Blueish hover */
+    color: hsl(210, 70%, 50%);
+}
+.edit-user-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* NEW: Reset Password button style */
+.reset-password-btn {
+    background: transparent;
+    border: none;
+    color: var(--foreground-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.reset-password-btn:hover:not(:disabled) {
+    background: hsla(39, 92%, 58%, 0.1); /* Orangeish hover */
+    color: hsl(39, 90%, 55%);
+}
+.reset-password-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 
 .delete-user-btn {
     background: transparent;
@@ -266,5 +325,132 @@ body {
     background: var(--background-muted);
     color: var(--foreground-muted);
     font-weight: 500;
+}
+
+
+/* --- Modal Styles (Added) --- */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 1;
+    transition: opacity var(--transition-fast);
+}
+.modal-backdrop.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    width: 100%;
+    max-width: 500px;
+    z-index: 1001;
+    transform: scale(1);
+    transition: all var(--transition-fast);
+}
+.modal-backdrop.hidden .modal-content {
+    transform: scale(0.95);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+.modal-header h2 {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background-color: var(--background);
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* Form hint style (Added) */
+.form-hint {
+    font-size: 0.875rem;
+    color: var(--foreground-muted);
+    margin-top: 0.25rem; /* Was -0.5rem. Adds space below labels. */
+    margin-bottom: 0.5rem; /* Adds space before the following select/input */
+}
+
+/* Upload status (Added) */
+.upload-status {
+    font-size: 0.875rem;
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    margin-top: 1rem;
+    display: none;
+}
+.upload-status.success {
+    background: hsla(145, 63%, 42%, 0.1);
+    color: hsl(145, 55%, 35%);
+}
+.upload-status.error {
+    background: hsla(0, 84.2%, 60.2%, 0.1);
+    color: hsl(0, 72.2%, 50.6%);
+}
+.upload-status.loading {
+    background: hsla(210, 80%, 50%, 0.1);
+    color: hsl(210, 70%, 50%);
+}
+
+
+/* --- Team Selector Styles (Added) --- */
+.team-selector-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+.team-list-box {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    height: 250px;
+    display: flex;
+    flex-direction: column;
+}
+.team-list-box h4 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--background);
+}
+.team-list {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+.team-list-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.team-list-item:hover {
+    background-color: var(--background-muted);
 }
 

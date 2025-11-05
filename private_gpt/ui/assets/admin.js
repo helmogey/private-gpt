@@ -21,6 +21,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const createUserStatus = document.getElementById('create-user-status');
     const userList = document.getElementById('user-list');
 
+    // Edit User Modal elements
+    const editUserModal = document.getElementById('edit-user-modal');
+    const editUserModalCloseBtn = document.getElementById('edit-user-modal-close-btn');
+    const editUsernameDisplay = document.getElementById('edit-username-display');
+    const editUserRoleSelect = document.getElementById('edit-user-role-select');
+    const editUserTeamsSelect = document.getElementById('edit-user-teams-select');
+    const cancelEditUserBtn = document.getElementById('cancel-edit-user-btn');
+    const saveEditUserBtn = document.getElementById('save-edit-user-btn');
+    const editUserStatus = document.getElementById('edit-user-status');
+
+    // NEW: Reset Password Modal elements
+    const resetPasswordModal = document.getElementById('reset-password-modal');
+    const resetPasswordModalCloseBtn = document.getElementById('reset-password-modal-close-btn');
+    const resetUsernameDisplay = document.getElementById('reset-username-display');
+    const newDefaultPasswordInput = document.getElementById('new-default-password');
+    const cancelResetPasswordBtn = document.getElementById('cancel-reset-password-btn');
+    const saveResetPasswordBtn = document.getElementById('save-reset-password-btn');
+    const resetPasswordStatus = document.getElementById('reset-password-status');
+
+
     // Document Management elements
     const docList = document.getElementById('doc-list');
     const permissionsModal = document.getElementById('permissions-modal');
@@ -35,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUsername = null;
     let allTeams = [];
     let currentEditingDoc = null;
+    let currentEditingUser = null; // Track user for editing/password reset
 
 
     // --- Utility Functions ---
@@ -175,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
             populateTeamsDropdown();
         } catch (error) {
             console.error('Error fetching teams list:', error);
-            allTeams = ['Default'];
+            allTeams = ['Default']; // Fallback
             populateTeamsDropdown();
         }
     }
@@ -183,11 +204,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function populateTeamsDropdown() {
         if (!newUserTeamSelect) return;
         newUserTeamSelect.innerHTML = '';
+        // Also populate the edit modal dropdown
+        editUserTeamsSelect.innerHTML = '';
+        
         allTeams.forEach(team => {
             const option = document.createElement('option');
             option.value = team;
             option.textContent = team;
+            
             newUserTeamSelect.appendChild(option);
+            // Clone the option for the edit modal
+            editUserTeamsSelect.appendChild(option.cloneNode(true));
         });
     }
 
@@ -201,16 +228,48 @@ document.addEventListener('DOMContentLoaded', () => {
             userList.innerHTML = '';
             users.forEach(user => {
                 const li = document.createElement('li');
-                const isDeletable = user.username !== 'admin' && user.username !== currentUsername;
+                const isEditableAndDeletable = user.username !== 'admin' && user.username !== currentUsername;
+                
+                // Handle single team (string) or multiple teams (array)
+                let teamDisplay = 'No Team';
+                let teamsData = '';
+                if (Array.isArray(user.teams) && user.teams.length > 0) {
+                    teamDisplay = user.teams.map(team => `<span class="user-team">${team}</span>`).join('');
+                    teamsData = user.teams.join(',');
+                } else if (typeof user.team === 'string' && user.team) {
+                    // Fallback for older single-team format
+                    teamDisplay = `<span class="user-team">${user.team}</span>`;
+                    teamsData = user.team;
+                }
 
                 li.innerHTML = `
                     <div class="user-info">
                         <span>${user.username}</span>
-                        <span class="user-team">${user.team || 'No Team'}</span>
+                        <div class="user-teams-list">${teamDisplay}</div>
                     </div>
                     <div class="user-role-actions">
                         <span class="user-role ${user.role}">${user.role}</span>
-                        <button class="delete-user-btn" data-username="${user.username}" title="Delete User" ${!isDeletable ? 'disabled' : ''}>
+                        
+                        <!-- Edit User Button -->
+                        <button class="edit-user-btn" 
+                                data-username="${user.username}" 
+                                data-role="${user.role}" 
+                                data-teams="${teamsData}" 
+                                title="Edit User" 
+                                ${!isEditableAndDeletable ? 'disabled' : ''}>
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83l3.75 3.75l1.84-1.83M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Z"/></svg>
+                        </button>
+                        
+                        <!-- NEW: Reset Password Button -->
+                        <button class="reset-password-btn"
+                                data-username="${user.username}"
+                                title="Reset Password"
+                                ${!isEditableAndDeletable ? 'disabled' : ''}>
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 17a2 2 0 0 0 2-2a2 2 0 0 0-2-2a2 2 0 0 0-2 2a2 2 0 0 0 2 2m6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2m-6 9a2 2 0 0 1-2-2a2 2 0 0 1 2-2a2 2 0 0 1 2 2a2 2 0 0 1-2 2m3-9H9V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2Z"/></svg>
+                        </button>
+
+                        <!-- Delete User Button -->
+                        <button class="delete-user-btn" data-username="${user.username}" title="Delete User" ${!isEditableAndDeletable ? 'disabled' : ''}>
                             <svg width="16" height="16" viewBox="0 0 24 24">
     <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
 </svg>
@@ -230,7 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const username = newUsernameInput.value.trim();
         const password = newPasswordInput.value.trim();
         const role = newUserRoleSelect.value;
-        const team = newUserTeamSelect.value;
+        const teams = Array.from(newUserTeamSelect.selectedOptions).map(option => option.value);
 
         if (!username || !password) {
             showStatus('Username and password are required.', 'error', createUserStatus);
@@ -242,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/admin/create-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, role, team }),
+                body: JSON.stringify({ username, password, role, teams }),
             });
 
             const result = await response.json();
@@ -285,6 +344,115 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Edit User Modal Functions ---
+    function openEditUserModal(username, role, teamsString) {
+        currentEditingUser = username;
+        editUsernameDisplay.textContent = username;
+        editUserRoleSelect.value = role;
+
+        // Deselect all team options first
+        Array.from(editUserTeamsSelect.options).forEach(opt => {
+            opt.selected = false;
+        });
+
+        // Select the user's current teams
+        const userTeams = teamsString ? teamsString.split(',') : [];
+        userTeams.forEach(teamName => {
+            const option = editUserTeamsSelect.querySelector(`option[value="${teamName}"]`);
+            if (option) {
+                option.selected = true;
+            }
+        });
+        
+        editUserModal.classList.remove('hidden');
+    }
+
+    async function handleSaveUserEdit() {
+        if (!currentEditingUser) return;
+
+        const newRole = editUserRoleSelect.value;
+        const newTeams = Array.from(editUserTeamsSelect.selectedOptions).map(option => option.value);
+
+        try {
+            showStatus('Saving changes...', 'loading', editUserStatus);
+            const response = await fetch('/api/admin/users/edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: currentEditingUser,
+                    new_role: newRole,
+                    new_teams: newTeams
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showStatus('User updated successfully.', 'success', editUserStatus);
+                await refreshUserList();
+                setTimeout(() => {
+                    editUserModal.classList.add('hidden');
+                    currentEditingUser = null;
+                }, 1500);
+            } else {
+                throw new Error(result.detail || 'Failed to save changes.');
+            }
+
+        } catch (error) {
+            console.error('Error saving user edits:', error);
+            showStatus(error.message, 'error', editUserStatus);
+        }
+    }
+
+    // --- NEW: Reset Password Modal Functions ---
+    function openResetPasswordModal(username) {
+        currentEditingUser = username;
+        resetUsernameDisplay.textContent = username;
+        newDefaultPasswordInput.value = ''; // Clear old password
+        resetPasswordModal.classList.remove('hidden');
+    }
+
+    async function handleResetPassword() {
+        if (!currentEditingUser) return;
+
+        const newPassword = newDefaultPasswordInput.value;
+        if (!newPassword) {
+            showStatus('Please enter a new password.', 'error', resetPasswordStatus);
+            return;
+        }
+
+        try {
+            showStatus('Resetting password...', 'loading', resetPasswordStatus);
+            // Note: Using a hypothetical endpoint. You must implement this on your backend.
+            const response = await fetch('/api/admin/users/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: currentEditingUser,
+                    new_password: newPassword
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showStatus('Password reset successfully.', 'success', resetPasswordStatus);
+                await refreshUserList();
+                setTimeout(() => {
+                    resetPasswordModal.classList.add('hidden');
+                    currentEditingUser = null;
+                }, 1500);
+            } else {
+                throw new Error(result.detail || 'Failed to reset password.');
+            }
+
+        } catch (error) {
+            console.error('Error resetting password:', error);
+            showStatus(error.message, 'error', resetPasswordStatus);
+        }
+    }
+
+
     // --- UI & Theme ---
     function manageTheme() {
         const savedTheme = localStorage.getItem('theme') || 'light';
@@ -326,8 +494,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     userList.addEventListener('click', (event) => {
         const deleteButton = event.target.closest('.delete-user-btn');
+        const editButton = event.target.closest('.edit-user-btn');
+        const resetButton = event.target.closest('.reset-password-btn'); // NEW
+
         if (deleteButton && !deleteButton.disabled) {
             handleDeleteUser(deleteButton.dataset.username);
+        }
+        
+        if (editButton && !editButton.disabled) {
+            const { username, role, teams } = editButton.dataset;
+            openEditUserModal(username, role, teams);
+        }
+
+        // NEW
+        if (resetButton && !resetButton.disabled) {
+            openResetPasswordModal(resetButton.dataset.username);
         }
     });
 
@@ -345,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     assignedTeamsList.addEventListener('click', e => {
-        if (e.target.classList.contains('team-list-item')) {
+        if (e.gittarget.classList.contains('team-list-item')) {
             moveTeamItem(e.target, assignedTeamsList, availableTeamsList);
         }
     });
@@ -355,6 +536,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     savePermissionsBtn.addEventListener('click', handleSavePermissions);
+
+    // Edit User Modal Listeners
+    [editUserModalCloseBtn, cancelEditUserBtn].forEach(btn => {
+        btn.addEventListener('click', () => {
+            editUserModal.classList.add('hidden');
+            currentEditingUser = null;
+            editUserStatus.style.display = 'none';
+        });
+    });
+
+    saveEditUserBtn.addEventListener('click', handleSaveUserEdit);
+    
+    // NEW: Reset Password Modal Listeners
+    [resetPasswordModalCloseBtn, cancelResetPasswordBtn].forEach(btn => {
+        btn.addEventListener('click', () => {
+            resetPasswordModal.classList.add('hidden');
+            currentEditingUser = null;
+            resetPasswordStatus.style.display = 'none';
+        });
+    });
+
+    saveResetPasswordBtn.addEventListener('click', handleResetPassword);
+
 
     // --- Initialization ---
     async function init() {
