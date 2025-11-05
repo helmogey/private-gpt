@@ -3,6 +3,7 @@ import logging
 import json
 from pathlib import Path
 from passlib.context import CryptContext
+from typing import List # <-- FIX: Import List
 from private_gpt.constants import PROJECT_ROOT_PATH
 
 # --- Configuration ---
@@ -37,14 +38,16 @@ def init_db():
                         role TEXT NOT NULL CHECK(role IN ('admin', 'user')),
                         name TEXT,
                         email TEXT,
-                        team TEXT,
+                        team TEXT, -- This will store teams as a JSON list
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     );
                 """)
                 hashed_pass = hash_password('admin')
+                # --- FIX: Store default team as a JSON list ---
+                default_team_json = json.dumps(['Default'])
                 cursor.execute(
                     "INSERT INTO users (username, hashed_password, role, name, email, team) VALUES (?, ?, ?, ?, ?, ?)",
-                    ('admin', hashed_pass, 'admin', 'Admin', '', 'Default')
+                    ('admin', hashed_pass, 'admin', 'Admin', '', default_team_json)
                 )
                 logger.info("Table 'users' created and default admin added.")
             else:
@@ -54,6 +57,8 @@ def init_db():
                     cursor.execute("ALTER TABLE users ADD COLUMN team TEXT;")
                     logger.info("Column 'team' added to 'users' table.")
 
+            # ... (rest of init_db is unchanged) ...
+            
             # Chat History Table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_history';")
             if cursor.fetchone() is None:
@@ -100,20 +105,34 @@ def hash_password(password: str) -> str:
 def get_user(username: str):
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        user = cursor.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-        return user
+        user_row = cursor.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        
+        if user_row:
+            # --- FIX: Deserialize 'team' from JSON string to list ---
+            user_dict = dict(user_row)
+            try:
+                user_dict['teams'] = json.loads(user_row['team']) if user_row['team'] else []
+            except json.JSONDecodeError:
+                user_dict['teams'] = [user_row['team']] # Fallback for old non-JSON data
+            # Also keep 'team' for compatibility if needed, but 'teams' is preferred
+            user_dict['team'] = user_dict['teams'] 
+            return user_dict
+        return None
 
-def create_user(username: str, password: str, role: str, team: str):
+def create_user(username: str, password: str, role: str, teams: List[str]):
+    """ --- FIX: Changed 'team: str' to 'teams: List[str]' --- """
     with get_db_connection() as conn:
         try:
             cursor = conn.cursor()
             hashed_pass = hash_password(password)
+            # --- FIX: Serialize teams list into JSON string ---
+            teams_json = json.dumps(teams)
             cursor.execute(
                 "INSERT INTO users (username, hashed_password, role, name, email, team) VALUES (?, ?, ?, ?, ?, ?)",
-                (username, hashed_pass, role, '', '', team)
+                (username, hashed_pass, role, '', '', teams_json)
             )
             conn.commit()
-            logger.info(f"User '{username}' created with role '{role}' and team '{team}'.")
+            logger.info(f"User '{username}' created with role '{role}' and teams '{teams_json}'.")
         except sqlite3.IntegrityError:
             logger.warning(f"User '{username}' already exists.")
 
@@ -124,6 +143,20 @@ def update_user_details(username: str, name: str, email: str):
             "UPDATE users SET name = ?, email = ? WHERE username = ?", (name, email, username)
         )
         conn.commit()
+
+# --- FIX: Added new function to update role and teams for admin ---
+def admin_update_user(username: str, new_role: str, new_teams: List[str]):
+    """Updates a user's role and teams (Admin only)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        teams_json = json.dumps(new_teams)
+        cursor.execute(
+            "UPDATE users SET role = ?, team = ? WHERE username = ?",
+            (new_role, teams_json, username)
+        )
+        conn.commit()
+        logger.info(f"Admin updated user '{username}'. New role: '{new_role}', New teams: '{teams_json}'.")
+
 
 def update_user_password(username: str, new_password: str):
     with get_db_connection() as conn:
@@ -139,7 +172,19 @@ def get_all_users():
     with get_db_connection() as conn:
         cursor = conn.cursor()
         users_rows = cursor.execute("SELECT id, username, role, created_at, team FROM users ORDER BY created_at DESC").fetchall()
-        users_list = [{key: user_row[key] for key in user_row.keys()} for user_row in users_rows]
+        
+        users_list = []
+        for user_row in users_rows:
+            # --- FIX: Deserialize 'team' for each user ---
+            user_dict = {key: user_row[key] for key in user_row.keys()}
+            try:
+                # 'team' column now stores a JSON list, 'teams' is the deserialized list
+                user_dict['teams'] = json.loads(user_row['team']) if user_row['team'] else []
+            except json.JSONDecodeError:
+                 # Fallback for old data that wasn't a JSON list
+                user_dict['teams'] = [user_row['team']] if user_row['team'] else []
+            users_list.append(user_dict)
+            
         return users_list
 
 def delete_user(username: str):
@@ -222,4 +267,3 @@ def get_document_teams(doc_id: str) -> list[str]:
         cursor = conn.cursor()
         teams = cursor.execute("SELECT team FROM document_teams WHERE doc_id = ?", (doc_id,)).fetchall()
         return [row['team'] for row in teams]
-

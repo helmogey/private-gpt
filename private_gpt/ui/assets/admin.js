@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveEditUserBtn = document.getElementById('save-edit-user-btn');
     const editUserStatus = document.getElementById('edit-user-status');
 
-    // NEW: Reset Password Modal elements
+    // Reset Password Modal elements
     const resetPasswordModal = document.getElementById('reset-password-modal');
     const resetPasswordModalCloseBtn = document.getElementById('reset-password-modal-close-btn');
     const resetUsernameDisplay = document.getElementById('reset-username-display');
@@ -284,6 +284,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * --- **FIXED** ---
+     * Helper to extract a readable error message from the server response.
+     * Handles strings, objects (e.g., detail.msg), and FastAPI validation arrays.
+     */
+    function getErrorMessage(detail) {
+        if (typeof detail === 'string') {
+            return detail;
+        }
+        if (Array.isArray(detail) && detail[0]?.msg) {
+            // Handle FastAPI validation errors
+            return detail.map(err => `${err.loc.join('.')} - ${err.msg}`).join('; ');
+        }
+        if (detail?.msg) {
+            // Handle other object-based error messages
+            return detail.msg;
+        }
+        // Fallback
+        return 'An unknown error occurred.';
+    }
+
+
     async function handleCreateUser(event) {
         event.preventDefault();
         const username = newUsernameInput.value.trim();
@@ -301,7 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/admin/create-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, role, teams }),
+                // ***FIX 1:*** Changed key from 'teams' to 'team' to match backend error
+                body: JSON.stringify({ username, password, role, team: teams }),
             });
 
             const result = await response.json();
@@ -311,7 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 createUserForm.reset();
                 await refreshUserList();
             } else {
-                throw new Error(result.detail || 'Failed to create user.');
+                // ***MODIFIED HERE***: Use the new error helper
+                throw new Error(getErrorMessage(result.detail) || 'Failed to create user.');
             }
         } catch (error) {
             console.error('Error creating user:', error);
@@ -336,7 +360,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 showStatus(result.message, 'success', createUserStatus);
                 await refreshUserList();
             } else {
-                throw new Error(result.detail || 'Failed to delete user.');
+                // ***MODIFIED HERE***: Use the new error helper
+                throw new Error(getErrorMessage(result.detail) || 'Failed to delete user.');
             }
         } catch (error) {
             console.error('Error deleting user:', error);
@@ -376,7 +401,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             showStatus('Saving changes...', 'loading', editUserStatus);
             const response = await fetch('/api/admin/users/edit', {
-                method: 'POST',
+                // ***FIX 2:*** Changed method from 'POST' to 'PUT'
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username: currentEditingUser,
@@ -395,7 +421,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentEditingUser = null;
                 }, 1500);
             } else {
-                throw new Error(result.detail || 'Failed to save changes.');
+                // ***MODIFIED HERE***: Use the new error helper
+                throw new Error(getErrorMessage(result.detail) || 'Failed to save changes.');
             }
 
         } catch (error) {
@@ -423,7 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             showStatus('Resetting password...', 'loading', resetPasswordStatus);
-            // Note: Using a hypothetical endpoint. You must implement this on your backend.
             const response = await fetch('/api/admin/users/reset-password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -443,7 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentEditingUser = null;
                 }, 1500);
             } else {
-                throw new Error(result.detail || 'Failed to reset password.');
+                // ***MODIFIED HERE***: Use the new error helper
+                throw new Error(getErrorMessage(result.detail) || 'Failed to reset password.');
             }
 
         } catch (error) {
@@ -526,7 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     assignedTeamsList.addEventListener('click', e => {
-        if (e.gittarget.classList.contains('team-list-item')) {
+        if (e.target.classList.contains('team-list-item')) {
             moveTeamItem(e.target, assignedTeamsList, availableTeamsList);
         }
     });

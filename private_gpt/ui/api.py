@@ -26,6 +26,7 @@ from private_gpt.database import (
     delete_user,
     add_document_teams,
     get_document_teams,
+    admin_update_user
 )
 from private_gpt.di import global_injector
 from private_gpt.server.chat.chat_service import ChatService
@@ -88,13 +89,22 @@ class CreateUserBody(BaseModel):
     username: str
     password: str
     role: str
-    team: str
+    team: List[str]
 
 class UpdateUserBody(BaseModel):
     name: str
     email: str
     new_password: str | None = None
 
+class AdminUpdateUserBody(BaseModel):
+    username: str
+    new_role: str
+    new_teams: List[str]
+
+class AdminResetPasswordBody(BaseModel):
+    username: str
+    new_password: str
+    
 class DocumentPermissionBody(BaseModel):
     file_name: str
     teams: List[str]
@@ -126,6 +136,7 @@ def get_user_info(request: Request):
         "name": db_user['name'],
         "email": db_user['email'],
         "display_name": display_name,
+        "teams": db_user['teams'] 
     })
 
 @api_router.post("/user/update")
@@ -448,15 +459,78 @@ async def handle_create_user(body: CreateUserBody):
     
     teams_str = os.getenv("TEAMS_LIST", "Default")
     teams_list = [team.strip() for team in teams_str.split(',')]
-    if body.team not in teams_list:
-        raise HTTPException(status_code=400, detail=f"Invalid team '{body.team}'. Must be one of {teams_list}")
+    
+    # This validation now checks the list
+    if not body.team:
+         raise HTTPException(status_code=400, detail="At least one team must be selected.")
+         
+    # --- FIX: Was checking if the whole list was in teams_list. ---
+    # --- Now, it correctly loops through each team in the list ---
+    # --- and validates them one by one. ---
+    for team in body.team:
+        if team not in teams_list:
+            raise HTTPException(status_code=400, detail=f"Invalid team '{team}'. Must be one of {teams_list}")
         
     try:
+        # This now passes the list to the fixed database.py function
         create_user(body.username, body.password, body.role, body.team)
         return JSONResponse(content={"message": f"User '{body.username}' created successfully."}, status_code=201)
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while creating user.")
+
+@api_router.put("/admin/users/edit", dependencies=[Depends(require_admin)])
+async def handle_edit_user(body: AdminUpdateUserBody, request: Request):
+    """Updates a user's role and teams. Admin only."""
+    
+    # Validation
+    if body.new_role not in ['admin', 'user']:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'user'.")
+
+    teams_str = os.getenv("TEAMS_LIST", "Default")
+    teams_list = [team.strip() for team in teams_str.split(',')]
+    
+    if not body.new_teams:
+         raise HTTPException(status_code=400, detail="At least one team must be selected.")
+         
+    for team in body.new_teams:
+        if team not in teams_list:
+            # --- FIX: Corrected typo '4Back' to '400' ---
+            raise HTTPException(status_code=400, detail=f"Invalid team '{team}'. Must be one of {teams_list}")
+
+    # Prevent admin from editing their own role or team
+    logged_in_user = request.session.get("username")
+    if body.username == logged_in_user:
+        raise HTTPException(status_code=400, detail="Admins cannot edit their own role or teams.")
+        
+    try:
+        # --- FIX: Call the new 'admin_update_user' function ---
+        admin_update_user(body.username, new_role=body.new_role, new_teams=body.new_teams)
+        
+        return JSONResponse(content={"message": f"User '{body.username}' updated successfully."}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error updating user '{body.username}': {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while updating user.")
+
+@api_router.post("/admin/users/reset-password", dependencies=[Depends(require_admin)])
+async def handle_reset_password(body: AdminResetPasswordBody, request: Request):
+    """Resets a user's password. Admin only."""
+    
+    logged_in_user = request.session.get("username")
+    if body.username == logged_in_user:
+        raise HTTPException(status_code=400, detail="You cannot reset your own password from this panel.")
+        
+    if not body.new_password:
+        raise HTTPException(status_code=400, detail="New password cannot be empty.")
+
+    try:
+        # We can reuse the existing database function
+        update_user_password(body.username, body.new_password)
+        
+        return JSONResponse(content={"message": f"Password for '{body.username}' reset successfully."}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error resetting password for user '{body.username}': {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while resetting password.")
 
 @api_router.delete("/admin/users/{username}", dependencies=[Depends(require_admin)])
 async def handle_delete_user(username: str, request: Request):
