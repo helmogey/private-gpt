@@ -31,19 +31,15 @@ SESSION_MAX_AGE = 600
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # These paths are required for the login page and the Gradio UI to function correctly.
+
         allowed_paths = [
             "/login",          # The login page itself
-            "/admin",
-            "/custom",
-            "/static",         # Static assets for the login page
             "/docs",           # API documentation
             "/openapi.json",   # API schema
-            "/theme.css",      # Gradio theme
-            "/assets",         # Gradio assets
-            "/file",           # Access to uploaded files for Gradio
-            "/queue",          # Gradio's WebSocket queue for interactivity
-            "/api"             # Gradio's internal API
+            "/v1",             # Original OpenAI-compatible API
+            "/health",         # Health check endpoint
         ]
+
         # If the request path starts with any of the allowed paths, let it through.
         if any(request.url.path.startswith(p) for p in allowed_paths):
             return await call_next(request)
@@ -87,7 +83,7 @@ def create_app(root_injector: Injector) -> FastAPI:
             request.session["user_id"] = db_user['id'] # Store user ID for logging
             request.session["username"] = db_user['username']
             request.session["user_role"] = db_user['role']
-            request.session["user_team"] = db_user['team']
+            request.session["user_teams"] = db_user['teams']
             request.session["user_name"] = db_user['name'] 
             return RedirectResponse(url="/", status_code=303)
         else:

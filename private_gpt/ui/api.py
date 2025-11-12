@@ -180,7 +180,7 @@ async def chat(
 ):
     user_id = request.session.get("user_id")
     user_role = request.session.get("user_role")
-    user_team = request.session.get("user_team")
+    user_teams = request.session.get("user_teams", [])
 
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
@@ -257,7 +257,9 @@ async def chat(
     if user_role != 'admin':
         all_docs = ingest_service.list_ingested()
         allowed_doc_ids = [
-            doc.doc_id for doc in all_docs if user_team in get_document_teams(doc.doc_id)
+            doc.doc_id for doc in all_docs 
+            # --- FIX: Check if any of the user's teams are in the doc's teams ---
+            if any(team in get_document_teams(doc.doc_id) for team in user_teams)
         ]
         if not allowed_doc_ids:
             async def empty_stream():
@@ -356,7 +358,7 @@ async def upload_files(
 @api_router.get("/files")
 def list_ingested_files(request: Request, ingest_service: "IngestService" = Depends(get_ingest_service)):
     user_role = request.session.get("user_role")
-    user_team = request.session.get("user_team")
+    user_teams = request.session.get("user_teams", [])
     
     all_docs = ingest_service.list_ingested()
     visible_files = set()
@@ -368,7 +370,7 @@ def list_ingested_files(request: Request, ingest_service: "IngestService" = Depe
                 continue
             
             doc_teams = get_document_teams(doc.doc_id)
-            if user_role == 'admin' or user_team in doc_teams:
+            if user_role == 'admin' or any(team in doc_teams for team in user_teams):
                 visible_files.add(file_name)
     
     return JSONResponse(content=[[name] for name in sorted(list(visible_files))])
