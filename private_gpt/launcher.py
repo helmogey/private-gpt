@@ -76,7 +76,7 @@ def create_app(root_injector: Injector) -> FastAPI:
 
     @app.post("/login", tags=["UI"])
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
-        db_user = get_user(username)
+        db_user = get_user(username.lower())
 
         if db_user and verify_password(password, db_user['hashed_password']):
             request.session["logged_in"] = True
