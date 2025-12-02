@@ -59,7 +59,7 @@ class IngestService:
                 if isinstance(file_data, bytes):
                     path_to_tmp.write_bytes(file_data)
                 else:
-                    path_to_tmp.write_text(str(file_data))
+                    path_to_tmp.write_text(str(file_data), encoding="utf-8")
                 return self.ingest_file(file_name, path_to_tmp)
             finally:
                 tmp.close()

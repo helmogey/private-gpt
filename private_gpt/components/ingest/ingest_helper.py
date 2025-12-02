@@ -87,9 +87,9 @@ class IngestionHelper:
                 "No reader found for extension=%s, using default string reader",
                 extension,
             )
-            # Read as a plain text
+            # Read as a plain text with explicit UTF-8 encoding
             string_reader = StringIterableReader()
-            return string_reader.load_data([file_data.read_text()])
+            return string_reader.load_data([file_data.read_text(encoding="utf-8")])
 
         logger.debug("Specific reader found for extension=%s", extension)
         documents = reader_cls().load_data(file_data)

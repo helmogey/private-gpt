@@ -9,7 +9,9 @@ from private_gpt.constants import PROJECT_ROOT_PATH
 # --- Configuration ---
 DB_FOLDER = PROJECT_ROOT_PATH / "userdb"
 DB_FILE = DB_FOLDER / "private_gpt.db"
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use pbkdf2_sha256 as primary, but support bcrypt for migration from old database
+# pbkdf2_sha256 is more compatible and doesn't have bcrypt version conflicts
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
 
 # --- Database Initialization ---
@@ -96,7 +98,32 @@ def init_db():
 
 # --- Password Utilities ---
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # Try to identify the hash scheme
+        try:
+            scheme = pwd_context.identify(hashed_password)
+        except Exception:
+            # Hash can't be identified - likely corrupted or from old incompatible version
+            # For admin user with default password, allow reset
+            if plain_password == 'admin' and hashed_password.startswith('$2'):
+                # Old bcrypt hash that can't be verified - reset it
+                logger.warning("Old bcrypt hash detected, resetting admin password")
+                with get_db_connection() as conn:
+                    cursor = conn.cursor()
+                    new_hash = hash_password('admin')
+                    cursor.execute(
+                        "UPDATE users SET hashed_password = ? WHERE username = 'admin'",
+                        (new_hash,)
+                    )
+                    conn.commit()
+                return True
+            return False
+        
+        result = pwd_context.verify(plain_password, hashed_password)
+        return result
+    except Exception as e:
+        logger.error(f"Password verification error: {e}")
+        return False
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)

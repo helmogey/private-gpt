@@ -5,8 +5,9 @@ from private_gpt.settings.settings import settings
 
 
 def _absolute_or_from_project_root(path: str) -> Path:
-    if path.startswith("/"):
-        return Path(path)
+    path_obj = Path(path)
+    if path_obj.is_absolute():
+        return path_obj
     return PROJECT_ROOT_PATH / path
 
 

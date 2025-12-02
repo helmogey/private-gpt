@@ -1,6 +1,7 @@
 import argparse
 import os
 import shutil
+from pathlib import Path
 from typing import Any, ClassVar
 
 from private_gpt.paths import local_data_path
@@ -22,11 +23,11 @@ def wipe_tree(path: str) -> None:
 
     files_to_remove = [file for file in all_files if file != ".gitignore"]
     for file_name in files_to_remove:
-        file_path = os.path.join(path, file_name)
+        file_path = Path(path) / file_name
         try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-            elif os.path.isdir(file_path):
+            if file_path.is_file():
+                file_path.unlink()
+            elif file_path.is_dir():
                 shutil.rmtree(file_path)
             print(f" - Deleted {file_path}")
         except PermissionError:

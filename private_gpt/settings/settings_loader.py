@@ -40,7 +40,7 @@ def load_settings_from_profile(profile: str) -> dict[str, Any]:
         profile_file_name = f"settings-{profile}.yaml"
 
     path = Path(_settings_folder) / profile_file_name
-    with Path(path).open("r") as f:
+    with Path(path).open("r", encoding="utf-8") as f:
         config = load_yaml_with_envvars(f)
     if not isinstance(config, dict):
         raise TypeError(f"Config file has no top-level mapping: {path}")

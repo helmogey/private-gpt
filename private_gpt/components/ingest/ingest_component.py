@@ -139,7 +139,8 @@ class SimpleIngestComponent(BaseIngestComponentWithIndex):
         logger.debug("Transforming count=%s documents into nodes", len(documents))
         with self._index_thread_lock:
             for document in documents:
-                self._index.insert(document, show_progress=True)
+                # Remove show_progress to avoid conflict with run_transformations
+                self._index.insert(document)
             logger.debug("Persisting the index and nodes")
             # persist the index and nodes
             self._save_index()
@@ -249,6 +250,10 @@ class ParallelizedIngestComponent(BaseIngestComponentWithIndex):
         # To do not collide with the multiprocessing of huggingface, we disable it
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+        # Note: On Windows, multiprocessing uses 'spawn' method which requires
+        # picklable functions. The current implementation should work since
+        # IngestionHelper.transform_file_into_documents is a static method.
+        # If issues occur, consider using ThreadPool on Windows.
         self._ingest_work_pool = multiprocessing.pool.ThreadPool(
             processes=self.count_workers
         )

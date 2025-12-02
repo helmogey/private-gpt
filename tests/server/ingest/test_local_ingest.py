@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,7 @@ def file_path() -> str:
 
 
 def create_test_file(file_path: str) -> None:
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         f.write("test")
 
 
@@ -22,14 +23,14 @@ def clear_log_file(log_file_path: str) -> None:
 
 
 def read_log_file(log_file_path: str) -> str:
-    with open(log_file_path) as f:
+    with open(log_file_path, encoding="utf-8") as f:
         return f.read()
 
 
 def init_structure(folder: str, file_path: str) -> None:
     clear_log_file(file_path)
     os.makedirs(folder, exist_ok=True)
-    create_test_file(f"{folder}/${file_path}")
+    create_test_file(str(Path(folder) / file_path))
 
 
 def test_ingest_one_file_in_allowed_folder(
@@ -43,7 +44,7 @@ def test_ingest_one_file_in_allowed_folder(
     test_env["LOCAL_INGESTION_ENABLED"] = "True"
 
     result = subprocess.run(
-        ["python", "scripts/ingest_folder.py", allowed_folder],
+        [sys.executable, "scripts/ingest_folder.py", allowed_folder],
         capture_output=True,
         text=True,
         env=test_env,
@@ -65,7 +66,7 @@ def test_ingest_disabled(file_path: str) -> None:
     test_env["LOCAL_INGESTION_ENABLED"] = "False"
 
     result = subprocess.run(
-        ["python", "scripts/ingest_folder.py", allowed_folder],
+        [sys.executable, "scripts/ingest_folder.py", allowed_folder],
         capture_output=True,
         text=True,
         env=test_env,
