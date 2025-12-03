@@ -21,11 +21,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const newChatBtn = document.getElementById('new-chat-btn');
     const chatTitle = document.getElementById('chat-title');
     
-    // Tagging Modal Elements
+    // Upload Modal Elements (Teams & Tags)
     const tagModal = document.getElementById('tag-modal');
     const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
+    
     const availableTeamsList = document.getElementById('available-teams-list');
     const selectedTeamsList = document.getElementById('selected-teams-list');
+    
+    const availableTagsList = document.getElementById('available-tags-list');
+    const selectedTagsList = document.getElementById('selected-tags-list');
+    
     const cancelUploadBtn = document.getElementById('cancel-upload-btn');
     const confirmUploadBtn = document.getElementById('confirm-upload-btn');
     
@@ -325,7 +330,8 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteSelectedBtn.disabled = true;
     }
 
-    async function handleFileUpload(files, teams) {
+    // --- [2025-12-03] Updated Upload to include Tags ---
+    async function handleFileUpload(files, teams, tags) {
         if (files.length === 0 || isUploading) return;
         isUploading = true;
     
@@ -340,6 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('files', files[i]);
         }
         formData.append('teams', JSON.stringify(teams));
+        formData.append('tags', JSON.stringify(tags)); // Append Tags
     
         try {
             let progress = 0;
@@ -422,8 +429,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     async function openUploadModal() {
-        const teams = await fetchTeams();
-        setupTeamSelector(teams);
+        // Fetch data in parallel
+        const [teams, tags] = await Promise.all([fetchTeams(), fetchTags()]);
+        
+        setupSelector(availableTeamsList, selectedTeamsList, teams);
+        setupSelector(availableTagsList, selectedTagsList, tags);
+        
         tagModal.classList.remove('hidden');
     }
 
@@ -525,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Team Selector (Upload Modal) ---
+    // --- List Selector Logic (Shared for Teams & Tags) ---
     async function fetchTeams() {
         try {
             const response = await fetch('/api/admin/teams');
@@ -533,23 +544,35 @@ document.addEventListener('DOMContentLoaded', () => {
             return await response.json();
         } catch (error) {
             console.error('Error fetching teams:', error);
-            return ['Default']; // Fallback
+            return ['Default'];
         }
     }
 
-    function setupTeamSelector(teams) {
-        availableTeamsList.innerHTML = '';
-        selectedTeamsList.innerHTML = '';
-        teams.forEach(team => {
+    // [2025-12-03] New Tag Fetcher
+    async function fetchTags() {
+        try {
+            const response = await fetch('/api/tags');
+            if (!response.ok) throw new Error('Failed to fetch tags');
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching tags:', error);
+            return ['GENERAL', 'EMPLOYEE', 'SERVER', 'ZABBIX']; // Fallback
+        }
+    }
+
+    function setupSelector(availableList, selectedList, items) {
+        availableList.innerHTML = '';
+        selectedList.innerHTML = '';
+        items.forEach(item => {
             const li = document.createElement('li');
-            li.className = 'team-list-item';
-            li.textContent = team;
-            li.dataset.team = team;
-            availableTeamsList.appendChild(li);
+            li.className = 'team-list-item'; // Reuse styling class
+            li.textContent = item;
+            li.dataset.value = item;
+            availableList.appendChild(li);
         });
     }
 
-    function moveTeamItem(element, fromList, toList) {
+    function moveItem(element, fromList, toList) {
         fromList.removeChild(element);
         toList.appendChild(element);
     }
@@ -598,38 +621,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const appName = data.appName || 'DocuMind';
             const logoUrl = data.logoUrl || '/assets/NEC-Logo.svg';
 
-            // --- Find the empty containers from index.html ---
             const logoIconContainer = document.getElementById('logo-icon-container');
             const welcomeIconContainer = document.getElementById('welcome-icon-container');
             const favicon = document.getElementById('favicon');
             
-            // Update page title and text elements
             document.title = `${appName} - AI-Powered Document Chat`;
             document.getElementById('app-header-title').textContent = appName;
             document.getElementById('welcome-header').textContent = `Welcome to`;
-            // This is the new line to update the app name in the welcome message
             document.getElementById('welcome-app-name').textContent = appName;
             
-            // --- Update the Favicon (Tab Icon) ---
             if (favicon) {
                 favicon.href = logoUrl;
             }
 
-            // --- Create and insert the Header Logo ---
             if (logoIconContainer) {
                 const logoImg = document.createElement('img');
                 logoImg.src = logoUrl;
                 logoImg.alt = `${appName} Logo`;
-                logoIconContainer.innerHTML = ''; // Clear the container first
+                logoIconContainer.innerHTML = '';
                 logoIconContainer.appendChild(logoImg);
             }
 
-            // --- Create and insert the Welcome Message Logo ---
             if (welcomeIconContainer) {
                 const welcomeLogoImg = document.createElement('img');
                 welcomeLogoImg.src = logoUrl;
                 welcomeLogoImg.alt = `${appName} Logo`;
-                welcomeIconContainer.innerHTML = ''; // Clear the container first
+                welcomeIconContainer.innerHTML = '';
                 welcomeIconContainer.appendChild(welcomeLogoImg);
             }
             
@@ -679,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 profileModal.classList.add('hidden');
                 tagModal.classList.add('hidden');
                 pendingFilesToUpload = null;
-                uploadInput._value = '';
+                uploadInput.value = '';
             });
         }
     });
@@ -706,8 +723,13 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (confirmUploadBtn) {
         confirmUploadBtn.addEventListener('click', () => {
-            const selectedTeamElements = selectedTeamsList.querySelectorAll('.team-list-item');
-            const selectedTeams = Array.from(selectedTeamElements).map(el => el.dataset.team);
+            // Gather Selected Teams
+            const selectedTeamElements = selectedTeamsList.querySelectorAll('li');
+            const selectedTeams = Array.from(selectedTeamElements).map(el => el.dataset.value);
+
+            // Gather Selected Tags
+            const selectedTagElements = selectedTagsList.querySelectorAll('li');
+            const selectedTags = Array.from(selectedTagElements).map(el => el.dataset.value);
 
             if (selectedTeams.length === 0) {
                 showStatus('Please select at least one team.', 'error', document.getElementById('tag-modal').querySelector('.upload-status'));
@@ -715,21 +737,28 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (pendingFilesToUpload) {
                 tagModal.classList.add('hidden');
-                handleFileUpload(pendingFilesToUpload, selectedTeams);
+                // Pass both teams and tags to upload handler
+                handleFileUpload(pendingFilesToUpload, selectedTeams, selectedTags);
             }
         });
     }
 
-    availableTeamsList.addEventListener('click', e => {
-        if (e.target.classList.contains('team-list-item')) {
-            moveTeamItem(e.target, availableTeamsList, selectedTeamsList);
-        }
-    });
-
-    selectedTeamsList.addEventListener('click', e => {
-        if (e.target.classList.contains('team-list-item')) {
-            moveTeamItem(e.target, selectedTeamsList, availableTeamsList);
-        }
+    // --- Generic Selector Event Listeners ---
+    // Using event delegation for both Teams and Tags lists
+    [
+        { available: availableTeamsList, selected: selectedTeamsList },
+        { available: availableTagsList, selected: selectedTagsList }
+    ].forEach(pair => {
+        pair.available.addEventListener('click', e => {
+            if (e.target.tagName === 'LI') {
+                moveItem(e.target, pair.available, pair.selected);
+            }
+        });
+        pair.selected.addEventListener('click', e => {
+            if (e.target.tagName === 'LI') {
+                moveItem(e.target, pair.selected, pair.available);
+            }
+        });
     });
 
     // --- Initialization ---
@@ -743,4 +772,3 @@ document.addEventListener('DOMContentLoaded', () => {
     loadInitialChat();
     fetchAndSetBranding();
 });
-

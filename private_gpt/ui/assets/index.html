@@ -15,9 +15,10 @@
         <!-- Column 1: Settings & Files -->
         <aside class="sidebar-primary">
             <div id="sidebar-header">
-                <div class="logo-container">
-                    <h1 id="app-header-title" class="fancy-header-text"></h1>
+                <div class="logo-container" id="logo-icon-container">
+                    <!-- Logo will be injected here -->
                 </div>
+                <h1 id="app-header-title" class="fancy-header-text"></h1>
             </div>
 
             <!-- File Management Section -->
@@ -114,9 +115,10 @@
             <div id="chatbot">
                 <div class="welcome-message" id="welcome-message">
                     <h2 id="welcome-header"></h2>
-                    <div class="welcome-branding-container">
-                        <h2 id="welcome-app-name"></h2>
+                    <div class="welcome-branding-container" id="welcome-icon-container">
+                        <!-- Logo will be injected here -->
                     </div>
+                    <h2 id="welcome-app-name"></h2>
                     <p>Start a conversation by typing a message below.</p>
                 </div>
             </div>
@@ -154,24 +156,49 @@
             </div>
         </div>
     </div>
+    
+    <!-- Updated Upload Modal (Teams + Tags) -->
     <div id="tag-modal" class="modal-backdrop hidden">
-        <div class="modal-content">
+        <div class="modal-content large"> <!-- Added 'large' class for wider modal -->
             <div class="modal-header">
-                <h2>🏷️ Assign Team Tags</h2>
+                <h2>📄 Upload Configuration</h2>
                 <button id="tag-modal-close-btn" class="theme-toggle">&times;</button>
             </div>
             <div class="modal-body">
-                <p class="form-hint" style="margin-top:0; margin-bottom: 1rem;">Move teams between lists to grant or revoke access to the uploaded document(s).</p>
-                <div class="team-selector-container">
-                    <div class="team-list-box">
-                        <h4>Available Teams</h4>
-                        <ul id="available-teams-list" class="team-list"></ul>
+                <p class="form-hint" style="margin-top:0; margin-bottom: 1rem;">Configure access (Teams) and categorization (Tags) for the uploaded document(s).</p>
+                
+                <div class="upload-config-row">
+                    <!-- Team Selector -->
+                    <div class="config-section">
+                        <h3>Assign Teams</h3>
+                        <div class="team-selector-container">
+                            <div class="team-list-box">
+                                <h4>Available</h4>
+                                <ul id="available-teams-list" class="team-list"></ul>
+                            </div>
+                            <div class="team-list-box">
+                                <h4>Selected</h4>
+                                <ul id="selected-teams-list" class="team-list"></ul>
+                            </div>
+                        </div>
                     </div>
-                    <div class="team-list-box">
-                        <h4>Selected Teams</h4>
-                        <ul id="selected-teams-list" class="team-list"></ul>
+
+                    <!-- Tag Selector -->
+                    <div class="config-section">
+                        <h3>Assign Category Tags</h3>
+                        <div class="team-selector-container">
+                            <div class="team-list-box">
+                                <h4>Available</h4>
+                                <ul id="available-tags-list" class="team-list"></ul>
+                            </div>
+                            <div class="team-list-box">
+                                <h4>Selected</h4>
+                                <ul id="selected-tags-list" class="team-list"></ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
                 <div id="tag-modal-status" class="upload-status"></div>
                 <div class="modal-actions">
                     <button id="cancel-upload-btn" class="icon-button">Cancel</button>
@@ -183,4 +210,3 @@
     <script src="/assets/script.js"></script>
 </body>
 </html>
-

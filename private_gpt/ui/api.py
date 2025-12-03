@@ -26,11 +26,15 @@ from private_gpt.database import (
     delete_user,
     add_document_teams,
     get_document_teams,
-    admin_update_user
+    admin_update_user,
+    add_document_tags,      # [2025-12-03] New Import
+    get_document_tags,      # [2025-12-03] New Import
+    get_docs_by_tag         # [2025-12-03] New Import
 )
 from private_gpt.di import global_injector
 from private_gpt.server.chat.chat_service import ChatService
 from private_gpt.server.chunks.chunks_service import ChunksService
+from private_gpt.server.ingest.ingest_service import IngestService
 from private_gpt.settings.settings import settings
 
 # This should match the value in launcher.py
@@ -65,8 +69,7 @@ def get_chat_service() -> ChatService:
 def get_chunks_service() -> ChunksService:
     return global_injector.get(ChunksService)
 
-def get_ingest_service() -> "IngestService":
-    from private_gpt.server.ingest.ingest_service import IngestService
+def get_ingest_service() -> IngestService:
     return global_injector.get(IngestService)
 
 # --- Utility and Authentication ---
@@ -76,6 +79,62 @@ async def require_admin(request: Request):
     if request.session.get("user_role") != "admin":
         raise HTTPException(status_code=403, detail="Forbidden: Requires admin privileges")
     return True
+
+# --- [2025-12-03] Category Identification Helper ---
+
+def identify_query_category(chat_service: ChatService, user_query: str) -> str:
+    """
+    Classifies the user intent using the LLM into specific categories.
+    Returns one of the categories defined in VALID_QUERY_CATEGORIES env var.
+    """
+    try:
+        # Access the LLM directly from the component within chat_service
+        llm = chat_service.llm_component.llm
+        
+        # Default prompt if .env variable is missing
+        default_prompt = (
+            "You are a query router. Classify the user's input into one of the following categories:\n"
+            "1. 'GENERAL': General information requests or casual chat.\n"
+            "2. 'EMPLOYEE': Requests about employee details, roles, HR info, or teams.\n"
+            "3. 'SERVER': Requests about server specs, hardware, or general infrastructure info (excluding live monitoring).\n"
+            "4. 'ZABBIX': Specific monitoring requests, plots, CPU/Memory stats, active problems, or Zabbix alerts.\n\n"
+            "User Query: {user_query}\n\n"
+            "Respond ONLY with the category name (e.g., 'ZABBIX', 'EMPLOYEE')."
+        )
+        
+        # Load prompt from environment variable, fallback to default
+        prompt_template = os.getenv("CATEGORY_CLASSIFICATION_PROMPT", default_prompt)
+        
+        # Handle potential literal newline characters if loaded from env (sometimes \n is read as literal slash n)
+        prompt_template = prompt_template.replace('\\n', '\n')
+        
+        # Inject the user query into the template
+        if "{user_query}" in prompt_template:
+            classification_prompt = prompt_template.replace("{user_query}", user_query)
+        else:
+            logger.warning("CATEGORY_CLASSIFICATION_PROMPT missing '{user_query}' placeholder. Appending query to end.")
+            classification_prompt = f"{prompt_template}\n\nUser Query: {user_query}"
+        
+        # Use a temporary ChatMessage list for this classification call
+        response = llm.chat([ChatMessage(role=MessageRole.USER, content=classification_prompt)])
+        category = response.message.content.strip().upper()
+        
+        # Load valid categories from Env
+        default_categories = "GENERAL,EMPLOYEE,SERVER,ZABBIX"
+        valid_categories_str = os.getenv("VALID_QUERY_CATEGORIES", default_categories)
+        valid_categories = [cat.strip().upper() for cat in valid_categories_str.split(',') if cat.strip()]
+        
+        for valid in valid_categories:
+            if valid in category:
+                return valid
+        
+        if "GENERAL" in valid_categories:
+            return "GENERAL"
+        return valid_categories[0] if valid_categories else "GENERAL"
+        
+    except Exception as e:
+        logger.error(f"Error identifying category: {e}")
+        return "GENERAL"
 
 # --- Pydantic Models ---
 
@@ -108,6 +167,7 @@ class AdminResetPasswordBody(BaseModel):
 class DocumentPermissionBody(BaseModel):
     file_name: str
     teams: List[str]
+    tags: List[str] = [] # [2025-12-03] New Field for admin update
 
 # --- UI Session & User Info Endpoints ---
 
@@ -138,6 +198,21 @@ def get_user_info(request: Request):
         "display_name": display_name,
         "teams": db_user['teams'] 
     })
+
+@api_router.get("/tags")
+def get_tags():
+    """
+    [2025-12-03] Returns the list of valid tags/categories from the environment.
+    Used by the frontend to populate upload dropdowns and admin filters.
+    """
+    default_categories = "GENERAL,EMPLOYEE,SERVER,ZABBIX"
+    # Read from .env, similar to how it's done in the classifier
+    valid_categories_str = os.getenv("VALID_QUERY_CATEGORIES", default_categories)
+    # Parse into a clean list
+    valid_categories = [cat.strip().upper() for cat in valid_categories_str.split(',') if cat.strip()]
+    
+    # --- FIX: Return the list directly, not wrapped in an object ---
+    return JSONResponse(content=valid_categories)
 
 @api_router.post("/user/update")
 async def handle_update_user(request: Request, body: UpdateUserBody):
@@ -176,7 +251,7 @@ async def chat(
     chat_body: ChatBody,
     chat_service: ChatService = Depends(get_chat_service),
     chunks_service: ChunksService = Depends(get_chunks_service),
-    ingest_service: "IngestService" = Depends(get_ingest_service)
+    ingest_service: IngestService = Depends(get_ingest_service)
 ):
     user_id = request.session.get("user_id")
     user_role = request.session.get("user_role")
@@ -184,6 +259,10 @@ async def chat(
 
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
+
+    # [2025-12-03] Identify Query Category
+    query_category = identify_query_category(chat_service, last_message.content)
+    logger.info(f"Incoming Query: '{last_message.content}' | Identified Category: {query_category}")
 
     # Save the original user message to the database before modifying it
     session_id = chat_body.session_id
@@ -194,7 +273,7 @@ async def chat(
     if user_id:
         save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
 
-    # NEW: Conditionally add date context
+    # Conditionally add date context
     time_keywords = [
         "today", "yesterday", "tomorrow", "week", "month", "year", "now",
         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -256,15 +335,37 @@ async def chat(
 
     if user_role != 'admin':
         all_docs = ingest_service.list_ingested()
-        allowed_doc_ids = [
-            doc.doc_id for doc in all_docs 
-            # --- FIX: Check if any of the user's teams are in the doc's teams ---
+        
+        # 1. Filter by Team Permissions first
+        allowed_docs = [
+            doc for doc in all_docs 
             if any(team in get_document_teams(doc.doc_id) for team in user_teams)
         ]
+
+        # 2. [2025-12-03] Filter by Category Tag
+        # If category is not GENERAL, only show docs matching that tag
+        # if query_category != "GENERAL":
+        # Get IDs of documents that have the matching tag
+        tagged_doc_ids = get_docs_by_tag(query_category)
+            
+        # Intersection: Must be allowed AND have the tag
+        allowed_docs = [doc for doc in allowed_docs if doc.doc_id in tagged_doc_ids]
+            
+        # If no docs found for specific category, the list becomes empty.
+        
+        allowed_doc_ids = [doc.doc_id for doc in allowed_docs]
+        print(allowed_docs)
+
         if not allowed_doc_ids:
+            # Check if it was empty because of strict filtering
+            msg = "You do not have access to any documents."
+            if query_category != "GENERAL":
+                msg = f"No documents found for category '{query_category}' that you have access to."
+                
             async def empty_stream():
-                yield f"data: {json.dumps({'delta': 'You do not have access to any documents.'})}\n\n"
+                yield f"data: {json.dumps({'delta': msg})}\n\n"
             return StreamingResponse(empty_stream(), media_type="text/event-stream")
+            
         if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
             requested_doc_id = chat_body.context_filter["docs_ids"][0]
             if requested_doc_id in allowed_doc_ids:
@@ -279,8 +380,7 @@ async def chat(
     elif chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
         # Admin with a specific file selected
         docs = ingest_service.list_ingested()
-        # The frontend sends the filename, not the doc_id. We need to find the doc_id.
-        selected_filename = chat_body.context_filter.get("docs_ids")[0] # This is actually a filename
+        selected_filename = chat_body.context_filter.get("docs_ids")[0]
         
         doc_ids_for_file = [
             doc.doc_id for doc in docs if doc.doc_metadata and doc.doc_metadata.get("file_name") == selected_filename
@@ -289,43 +389,67 @@ async def chat(
         if doc_ids_for_file:
             final_context_filter = ContextFilter(docs_ids=doc_ids_for_file)
         else:
-            # If no file is selected or found, admin can query all documents
             final_context_filter = None
+            
+    # [2025-12-03] Admin filtering by Category
+    # If admin hasn't selected a specific file, apply the category filter to all docs
+    elif user_role == 'admin' and final_context_filter is None:
+        if query_category != "GENERAL":
+             tagged_doc_ids = get_docs_by_tag(query_category)
+             if tagged_doc_ids:
+                 final_context_filter = ContextFilter(docs_ids=tagged_doc_ids)
 
-    completion_gen = chat_service.stream_chat(
-        messages=messages,
-        use_context=True,
-        context_filter=final_context_filter,
-    )
+    try:
+        completion_gen = chat_service.stream_chat(
+            messages=messages,
+            use_context=True,
+            context_filter=final_context_filter,
+        )
 
-    async def stream_generator():
-        full_response = ""
-        if is_new_chat:
-            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-        for delta in completion_gen.response:
-            text_delta = delta if isinstance(delta, str) else delta.delta
-            full_response += text_delta
-            yield f"data: {json.dumps({'delta': text_delta})}\n\n"
-        if user_id:
-            save_chat_message(user_id, session_id, 'assistant', full_response, False)
-        if completion_gen.sources:
-            sources_data = [
-                {
-                    "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
-                    "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
-                    "text": chunk.text,
-                }
-                for chunk in completion_gen.sources
-            ]
-            yield f"data: {json.dumps({'sources': sources_data})}\n\n"
+        async def stream_generator():
+            full_response = ""
+            if is_new_chat:
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+            for delta in completion_gen.response:
+                text_delta = delta if isinstance(delta, str) else delta.delta
+                full_response += text_delta
+                yield f"data: {json.dumps({'delta': text_delta})}\n\n"
+            if user_id:
+                save_chat_message(user_id, session_id, 'assistant', full_response, False)
+            if completion_gen.sources:
+                sources_data = [
+                    {
+                        "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
+                        "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
+                        "text": chunk.text,
+                    }
+                    for chunk in completion_gen.sources
+                ]
+                yield f"data: {json.dumps({'sources': sources_data})}\n\n"
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+        
+    except Exception as e:
+        logger.error(f"Error during Chat/RAG execution: {e}")
+        error_message = (
+            f"**System Error**: The vector index seems corrupted or missing.\n\n"
+            f"Details: {str(e)}\n\n"
+            "**Fix**: Please go to the 'Files' section and re-upload/ingest your documents to rebuild the index."
+        )
+        
+        async def error_stream():
+            if is_new_chat:
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+            yield f"data: {json.dumps({'delta': error_message})}\n\n"
+            
+        return StreamingResponse(error_stream(), media_type="text/event-stream")
 
 @api_router.post("/upload", dependencies=[Depends(require_admin)])
 async def upload_files(
     files: List[UploadFile] = File(...), 
     teams: str = Form(...),
-    ingest_service: "IngestService" = Depends(get_ingest_service)
+    tags: str = Form(default="[]"), # [2025-12-03] Accept tags as JSON string
+    ingest_service: IngestService = Depends(get_ingest_service)
 ):
     temp_paths = []
     ingested_docs_info = []
@@ -344,9 +468,12 @@ async def upload_files(
         if ingested_docs_info:
             ingested_docs = ingest_service.bulk_ingest(ingested_docs_info)
             team_list = json.loads(teams)
+            tag_list = json.loads(tags) # [2025-12-03] Parse tags
             
             for doc in ingested_docs:
                 add_document_teams(doc.doc_id, team_list)
+                if tag_list:
+                    add_document_tags(doc.doc_id, tag_list) # [2025-12-03] Add tags
             
     finally:
         for path in temp_paths:
@@ -356,7 +483,7 @@ async def upload_files(
     return JSONResponse(content={"message": f"{len(files)} file(s) uploaded successfully"}, status_code=200)
 
 @api_router.get("/files")
-def list_ingested_files(request: Request, ingest_service: "IngestService" = Depends(get_ingest_service)):
+def list_ingested_files(request: Request, ingest_service: IngestService = Depends(get_ingest_service)):
     user_role = request.session.get("user_role")
     user_teams = request.session.get("user_teams", [])
     
@@ -377,7 +504,7 @@ def list_ingested_files(request: Request, ingest_service: "IngestService" = Depe
 
 
 @api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
-def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depends(get_ingest_service)):
+def delete_selected_file(file_name: str, ingest_service: IngestService = Depends(get_ingest_service)):
     decoded_file_name = unquote(file_name)
     
     all_docs = ingest_service.list_ingested()
@@ -396,7 +523,7 @@ def delete_selected_file(file_name: str, ingest_service: "IngestService" = Depen
 
 
 @api_router.delete("/files", dependencies=[Depends(require_admin)])
-def delete_all_files(ingest_service: "IngestService" = Depends(get_ingest_service)):
+def delete_all_files(ingest_service: IngestService = Depends(get_ingest_service)):
     ingested_files = ingest_service.list_ingested()
     for doc in ingested_files:
         ingest_service.delete(doc.doc_id)
@@ -412,7 +539,7 @@ async def get_teams_list():
     return JSONResponse(content=teams_list)
 
 @api_router.get("/admin/documents", dependencies=[Depends(require_admin)])
-async def get_all_documents_with_permissions(ingest_service: "IngestService" = Depends(get_ingest_service)):
+async def get_all_documents_with_permissions(ingest_service: IngestService = Depends(get_ingest_service)):
     all_docs = ingest_service.list_ingested()
     docs_by_filename = {}
     for doc in all_docs:
@@ -421,14 +548,15 @@ async def get_all_documents_with_permissions(ingest_service: "IngestService" = D
             if filename not in docs_by_filename:
                 docs_by_filename[filename] = {
                     "file_name": filename,
-                    "teams": get_document_teams(doc.doc_id)
+                    "teams": get_document_teams(doc.doc_id),
+                    "tags": get_document_tags(doc.doc_id) # [2025-12-03] Return tags
                 }
     return JSONResponse(content=list(docs_by_filename.values()))
 
 @api_router.post("/admin/documents/permissions", dependencies=[Depends(require_admin)])
 async def update_document_permissions(
     body: DocumentPermissionBody,
-    ingest_service: "IngestService" = Depends(get_ingest_service)
+    ingest_service: IngestService = Depends(get_ingest_service)
 ):
     all_docs = ingest_service.list_ingested()
     doc_ids_to_update = [
@@ -441,6 +569,8 @@ async def update_document_permissions(
 
     for doc_id in doc_ids_to_update:
         add_document_teams(doc_id, body.teams)
+        if body.tags: # [2025-12-03] Update tags if provided
+             add_document_tags(doc_id, body.tags)
 
     return JSONResponse(content={"message": "Permissions updated successfully."})
 
@@ -462,19 +592,14 @@ async def handle_create_user(body: CreateUserBody):
     teams_str = os.getenv("TEAMS_LIST", "Default")
     teams_list = [team.strip() for team in teams_str.split(',')]
     
-    # This validation now checks the list
     if not body.team:
          raise HTTPException(status_code=400, detail="At least one team must be selected.")
          
-    # --- FIX: Was checking if the whole list was in teams_list. ---
-    # --- Now, it correctly loops through each team in the list ---
-    # --- and validates them one by one. ---
     for team in body.team:
         if team not in teams_list:
             raise HTTPException(status_code=400, detail=f"Invalid team '{team}'. Must be one of {teams_list}")
         
     try:
-        # This now passes the list to the fixed database.py function
         create_user(body.username, body.password, body.role, body.team)
         return JSONResponse(content={"message": f"User '{body.username}' created successfully."}, status_code=201)
     except Exception as e:
@@ -497,7 +622,6 @@ async def handle_edit_user(body: AdminUpdateUserBody, request: Request):
          
     for team in body.new_teams:
         if team not in teams_list:
-            # --- FIX: Corrected typo '4Back' to '400' ---
             raise HTTPException(status_code=400, detail=f"Invalid team '{team}'. Must be one of {teams_list}")
 
     # Prevent admin from editing their own role or team
@@ -506,7 +630,6 @@ async def handle_edit_user(body: AdminUpdateUserBody, request: Request):
         raise HTTPException(status_code=400, detail="Admins cannot edit their own role or teams.")
         
     try:
-        # --- FIX: Call the new 'admin_update_user' function ---
         admin_update_user(body.username, new_role=body.new_role, new_teams=body.new_teams)
         
         return JSONResponse(content={"message": f"User '{body.username}' updated successfully."}, status_code=200)
@@ -526,7 +649,6 @@ async def handle_reset_password(body: AdminResetPasswordBody, request: Request):
         raise HTTPException(status_code=400, detail="New password cannot be empty.")
 
     try:
-        # We can reuse the existing database function
         update_user_password(body.username, body.new_password)
         
         return JSONResponse(content={"message": f"Password for '{body.username}' reset successfully."}, status_code=200)
@@ -549,4 +671,3 @@ async def handle_delete_user(username: str, request: Request):
     except Exception as e:
         logger.error(f"Error deleting user '{username}': {e}")
         raise HTTPException(status_code=500, detail="Internal server error while deleting user.")
-

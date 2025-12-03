@@ -327,6 +327,18 @@ select[multiple].textbox option:checked {
     font-weight: 500;
 }
 
+/* [2025-12-03] Visual distinction for Tags */
+.tag-badge {
+    background-color: hsla(210, 80%, 50%, 0.1);
+    color: hsl(210, 70%, 50%);
+}
+
+.empty-badge {
+    font-size: 0.75rem;
+    color: var(--foreground-subtle);
+    font-style: italic;
+}
+
 
 /* --- Modal Styles (Added) --- */
 .modal-backdrop {
@@ -357,6 +369,12 @@ select[multiple].textbox option:checked {
     transform: scale(1);
     transition: all var(--transition-fast);
 }
+
+/* [2025-12-03] Override max-width for the new large modal in admin */
+.modal-content.large {
+    max-width: 900px;
+}
+
 .modal-backdrop.hidden .modal-content {
     transform: scale(0.95);
 }
@@ -453,4 +471,3 @@ select[multiple].textbox option:checked {
 .team-list-item:hover {
     background-color: var(--background-muted);
 }
-

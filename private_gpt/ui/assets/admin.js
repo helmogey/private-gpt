@@ -46,16 +46,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const permissionsModal = document.getElementById('permissions-modal');
     const permissionsModalCloseBtn = document.getElementById('permissions-modal-close-btn');
     const modalDocName = document.getElementById('modal-doc-name');
+    
+    // Team Lists
     const availableTeamsList = document.getElementById('available-teams-list-modal');
     const assignedTeamsList = document.getElementById('assigned-teams-list-modal');
+    
+    // [2025-12-03] Tag Lists
+    const availableTagsList = document.getElementById('available-tags-list-modal');
+    const assignedTagsList = document.getElementById('assigned-tags-list-modal');
+
     const cancelPermissionsBtn = document.getElementById('cancel-permissions-btn');
     const savePermissionsBtn = document.getElementById('save-permissions-btn');
 
     // --- State Variables ---
     let currentUsername = null;
     let allTeams = [];
+    let allTags = []; // [2025-12-03]
     let currentEditingDoc = null;
-    let currentEditingUser = null; // Track user for editing/password reset
+    let currentEditingUser = null; 
 
 
     // --- Utility Functions ---
@@ -68,22 +76,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     }
 
+    function getErrorMessage(detail) {
+        if (typeof detail === 'string') return detail;
+        if (Array.isArray(detail) && detail[0]?.msg) return detail.map(err => `${err.loc.join('.')} - ${err.msg}`).join('; ');
+        if (detail?.msg) return detail.msg;
+        return 'An unknown error occurred.';
+    }
+
     // --- Tab Navigation ---
     function setupTabs() {
         userManagementTab.addEventListener('click', () => {
-            // Button state
             userManagementTab.classList.add('active');
             docManagementTab.classList.remove('active');
-            // Content visibility
             userManagementContent.classList.add('active');
             docManagementContent.classList.remove('active');
         });
 
         docManagementTab.addEventListener('click', () => {
-            // Button state
             docManagementTab.classList.add('active');
             userManagementTab.classList.remove('active');
-            // Content visibility
             docManagementContent.classList.add('active');
             userManagementContent.classList.remove('active');
         });
@@ -100,23 +111,31 @@ document.addEventListener('DOMContentLoaded', () => {
             renderDocumentList(documents);
         } catch (error) {
             console.error('Error fetching documents:', error);
-            docList.innerHTML = '<tr><td colspan="3">Could not load documents.</td></tr>';
+            docList.innerHTML = '<tr><td colspan="4">Could not load documents.</td></tr>';
         }
     }
 
     function renderDocumentList(documents) {
         docList.innerHTML = '';
         if (documents.length === 0) {
-            docList.innerHTML = '<tr><td colspan="3">No documents have been ingested yet.</td></tr>';
+            docList.innerHTML = '<tr><td colspan="4">No documents have been ingested yet.</td></tr>';
             return;
         }
         documents.forEach(doc => {
             const tr = document.createElement('tr');
+            // Safe fallback if tags is undefined (older version)
+            const tags = doc.tags || [];
+            
             tr.innerHTML = `
                 <td>${doc.file_name}</td>
                 <td>
                     <div class="team-badges">
-                        ${doc.teams.map(team => `<span class="team-badge">${team}</span>`).join('') || '<span>No teams assigned</span>'}
+                        ${doc.teams.map(team => `<span class="team-badge">${team}</span>`).join('') || '<span class="empty-badge">No teams</span>'}
+                    </div>
+                </td>
+                <td>
+                    <div class="team-badges"> <!-- Reuse badge style for tags -->
+                        ${tags.map(tag => `<span class="team-badge tag-badge">${tag}</span>`).join('') || '<span class="empty-badge">No tags</span>'}
                     </div>
                 </td>
                 <td>
@@ -131,22 +150,46 @@ document.addEventListener('DOMContentLoaded', () => {
         currentEditingDoc = docName;
         modalDocName.textContent = docName;
     
+        // Find the document data from the table (simple approach) or fetch again.
+        // We'll scrape the current state from the table DOM for simplicity in this context,
+        // but ideally we should store 'documents' in a state variable.
         const docRow = Array.from(docList.querySelectorAll('tr')).find(row => row.cells[0].textContent === docName);
-        const assignedTeamBadges = docRow.querySelectorAll('.team-badge');
+        
+        // 1. Teams
+        const assignedTeamBadges = docRow.cells[1].querySelectorAll('.team-badge');
         const assignedTeams = Array.from(assignedTeamBadges).map(badge => badge.textContent);
+        
+        // 2. Tags
+        const assignedTagBadges = docRow.cells[2].querySelectorAll('.team-badge');
+        const assignedTags = Array.from(assignedTagBadges).map(badge => badge.textContent);
     
+        // Populate Teams
         availableTeamsList.innerHTML = '';
         assignedTeamsList.innerHTML = '';
-    
         allTeams.forEach(team => {
             const li = document.createElement('li');
             li.className = 'team-list-item';
             li.textContent = team;
-            li.dataset.team = team;
+            li.dataset.value = team;
             if (assignedTeams.includes(team)) {
                 assignedTeamsList.appendChild(li);
             } else {
                 availableTeamsList.appendChild(li);
+            }
+        });
+
+        // Populate Tags
+        availableTagsList.innerHTML = '';
+        assignedTagsList.innerHTML = '';
+        allTags.forEach(tag => {
+            const li = document.createElement('li');
+            li.className = 'team-list-item';
+            li.textContent = tag;
+            li.dataset.value = tag;
+            if (assignedTags.includes(tag)) {
+                assignedTagsList.appendChild(li);
+            } else {
+                availableTagsList.appendChild(li);
             }
         });
     
@@ -160,7 +203,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function handleSavePermissions() {
         const assignedTeamElements = assignedTeamsList.querySelectorAll('.team-list-item');
-        const newTeams = Array.from(assignedTeamElements).map(el => el.dataset.team);
+        const newTeams = Array.from(assignedTeamElements).map(el => el.dataset.value);
+
+        const assignedTagElements = assignedTagsList.querySelectorAll('.team-list-item');
+        const newTags = Array.from(assignedTagElements).map(el => el.dataset.value);
 
         try {
             const response = await fetch('/api/admin/documents/permissions', {
@@ -168,7 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     file_name: currentEditingDoc,
-                    teams: newTeams
+                    teams: newTeams,
+                    tags: newTags
                 })
             });
 
@@ -201,10 +248,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // [2025-12-03] Fetch Tags
+    async function fetchAndStoreTags() {
+        try {
+            const response = await fetch('/api/tags');
+            if (!response.ok) throw new Error('Failed to fetch tags');
+            allTags = await response.json();
+        } catch (error) {
+            console.error('Error fetching tags list:', error);
+            allTags = ['GENERAL']; // Fallback
+        }
+    }
+
     function populateTeamsDropdown() {
         if (!newUserTeamSelect) return;
         newUserTeamSelect.innerHTML = '';
-        // Also populate the edit modal dropdown
         editUserTeamsSelect.innerHTML = '';
         
         allTeams.forEach(team => {
@@ -213,7 +271,6 @@ document.addEventListener('DOMContentLoaded', () => {
             option.textContent = team;
             
             newUserTeamSelect.appendChild(option);
-            // Clone the option for the edit modal
             editUserTeamsSelect.appendChild(option.cloneNode(true));
         });
     }
@@ -230,14 +287,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const li = document.createElement('li');
                 const isEditableAndDeletable = user.username !== 'admin' && user.username !== currentUsername;
                 
-                // Handle single team (string) or multiple teams (array)
                 let teamDisplay = 'No Team';
                 let teamsData = '';
                 if (Array.isArray(user.teams) && user.teams.length > 0) {
                     teamDisplay = user.teams.map(team => `<span class="user-team">${team}</span>`).join('');
                     teamsData = user.teams.join(',');
                 } else if (typeof user.team === 'string' && user.team) {
-                    // Fallback for older single-team format
                     teamDisplay = `<span class="user-team">${user.team}</span>`;
                     teamsData = user.team;
                 }
@@ -249,30 +304,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="user-role-actions">
                         <span class="user-role ${user.role}">${user.role}</span>
-                        
-                        <!-- Edit User Button -->
-                        <button class="edit-user-btn" 
-                                data-username="${user.username}" 
-                                data-role="${user.role}" 
-                                data-teams="${teamsData}" 
-                                title="Edit User" 
-                                ${!isEditableAndDeletable ? 'disabled' : ''}>
+                        <button class="edit-user-btn" data-username="${user.username}" data-role="${user.role}" data-teams="${teamsData}" title="Edit User" ${!isEditableAndDeletable ? 'disabled' : ''}>
                             <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83l3.75 3.75l1.84-1.83M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Z"/></svg>
                         </button>
-                        
-                        <!-- NEW: Reset Password Button -->
-                        <button class="reset-password-btn"
-                                data-username="${user.username}"
-                                title="Reset Password"
-                                ${!isEditableAndDeletable ? 'disabled' : ''}>
+                        <button class="reset-password-btn" data-username="${user.username}" title="Reset Password" ${!isEditableAndDeletable ? 'disabled' : ''}>
                             <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 17a2 2 0 0 0 2-2a2 2 0 0 0-2-2a2 2 0 0 0-2 2a2 2 0 0 0 2 2m6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2m-6 9a2 2 0 0 1-2-2a2 2 0 0 1 2-2a2 2 0 0 1 2 2a2 2 0 0 1-2 2m3-9H9V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2Z"/></svg>
                         </button>
-
-                        <!-- Delete User Button -->
                         <button class="delete-user-btn" data-username="${user.username}" title="Delete User" ${!isEditableAndDeletable ? 'disabled' : ''}>
-                            <svg width="16" height="16" viewBox="0 0 24 24">
-    <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-</svg>
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                         </button>
                     </div>
                 `;
@@ -283,28 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
             showStatus('Could not load user list', 'error', createUserStatus);
         }
     }
-
-    /**
-     * --- **FIXED** ---
-     * Helper to extract a readable error message from the server response.
-     * Handles strings, objects (e.g., detail.msg), and FastAPI validation arrays.
-     */
-    function getErrorMessage(detail) {
-        if (typeof detail === 'string') {
-            return detail;
-        }
-        if (Array.isArray(detail) && detail[0]?.msg) {
-            // Handle FastAPI validation errors
-            return detail.map(err => `${err.loc.join('.')} - ${err.msg}`).join('; ');
-        }
-        if (detail?.msg) {
-            // Handle other object-based error messages
-            return detail.msg;
-        }
-        // Fallback
-        return 'An unknown error occurred.';
-    }
-
 
     async function handleCreateUser(event) {
         event.preventDefault();
@@ -323,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/admin/create-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                // ***FIX 1:*** Changed key from 'teams' to 'team' to match backend error
                 body: JSON.stringify({ username, password, role, team: teams }),
             });
 
@@ -334,7 +350,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 createUserForm.reset();
                 await refreshUserList();
             } else {
-                // ***MODIFIED HERE***: Use the new error helper
                 throw new Error(getErrorMessage(result.detail) || 'Failed to create user.');
             }
         } catch (error) {
@@ -344,23 +359,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function handleDeleteUser(username) {
-        if (!confirm(`Are you sure you want to permanently delete the user '${username}'? This action cannot be undone.`)) {
-            return;
-        }
+        if (!confirm(`Are you sure you want to permanently delete the user '${username}'?`)) return;
 
         try {
             showStatus('Deleting user...', 'loading', createUserStatus);
-            const response = await fetch(`/api/admin/users/${username}`, {
-                method: 'DELETE',
-            });
-
+            const response = await fetch(`/api/admin/users/${username}`, { method: 'DELETE' });
             const result = await response.json();
 
             if (response.ok) {
                 showStatus(result.message, 'success', createUserStatus);
                 await refreshUserList();
             } else {
-                // ***MODIFIED HERE***: Use the new error helper
                 throw new Error(getErrorMessage(result.detail) || 'Failed to delete user.');
             }
         } catch (error) {
@@ -375,18 +384,14 @@ document.addEventListener('DOMContentLoaded', () => {
         editUsernameDisplay.textContent = username;
         editUserRoleSelect.value = role;
 
-        // Deselect all team options first
         Array.from(editUserTeamsSelect.options).forEach(opt => {
             opt.selected = false;
         });
 
-        // Select the user's current teams
         const userTeams = teamsString ? teamsString.split(',') : [];
         userTeams.forEach(teamName => {
             const option = editUserTeamsSelect.querySelector(`option[value="${teamName}"]`);
-            if (option) {
-                option.selected = true;
-            }
+            if (option) option.selected = true;
         });
         
         editUserModal.classList.remove('hidden');
@@ -401,7 +406,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             showStatus('Saving changes...', 'loading', editUserStatus);
             const response = await fetch('/api/admin/users/edit', {
-                // ***FIX 2:*** Changed method from 'POST' to 'PUT'
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -421,7 +425,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentEditingUser = null;
                 }, 1500);
             } else {
-                // ***MODIFIED HERE***: Use the new error helper
                 throw new Error(getErrorMessage(result.detail) || 'Failed to save changes.');
             }
 
@@ -431,11 +434,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- NEW: Reset Password Modal Functions ---
+    // --- Reset Password Modal Functions ---
     function openResetPasswordModal(username) {
         currentEditingUser = username;
         resetUsernameDisplay.textContent = username;
-        newDefaultPasswordInput.value = ''; // Clear old password
+        newDefaultPasswordInput.value = '';
         resetPasswordModal.classList.remove('hidden');
     }
 
@@ -469,7 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentEditingUser = null;
                 }, 1500);
             } else {
-                // ***MODIFIED HERE***: Use the new error helper
                 throw new Error(getErrorMessage(result.detail) || 'Failed to reset password.');
             }
 
@@ -522,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
     userList.addEventListener('click', (event) => {
         const deleteButton = event.target.closest('.delete-user-btn');
         const editButton = event.target.closest('.edit-user-btn');
-        const resetButton = event.target.closest('.reset-password-btn'); // NEW
+        const resetButton = event.target.closest('.reset-password-btn');
 
         if (deleteButton && !deleteButton.disabled) {
             handleDeleteUser(deleteButton.dataset.username);
@@ -533,7 +535,6 @@ document.addEventListener('DOMContentLoaded', () => {
             openEditUserModal(username, role, teams);
         }
 
-        // NEW
         if (resetButton && !resetButton.disabled) {
             openResetPasswordModal(resetButton.dataset.username);
         }
@@ -546,15 +547,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    availableTeamsList.addEventListener('click', e => {
-        if (e.target.classList.contains('team-list-item')) {
-            moveTeamItem(e.target, availableTeamsList, assignedTeamsList);
-        }
-    });
-
-    assignedTeamsList.addEventListener('click', e => {
-        if (e.target.classList.contains('team-list-item')) {
-            moveTeamItem(e.target, assignedTeamsList, availableTeamsList);
+    // Generic list mover for all 4 lists (teams avail/assigned, tags avail/assigned)
+    [availableTeamsList, assignedTeamsList, availableTagsList, assignedTagsList].forEach(list => {
+        if (list) {
+            list.addEventListener('click', e => {
+                if (e.target.classList.contains('team-list-item')) {
+                    // Logic: Find sibling list (Available <-> Assigned)
+                    // This is slightly brittle, assumes container structure: div.team-selector-container > div > ul
+                    // Simplified approach: If ID contains 'available', move to 'assigned' and vice versa.
+                    const targetId = list.id.includes('available') ? list.id.replace('available', 'assigned') : list.id.replace('assigned', 'available');
+                    const targetList = document.getElementById(targetId);
+                    if (targetList) moveTeamItem(e.target, list, targetList);
+                }
+            });
         }
     });
 
@@ -575,7 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveEditUserBtn.addEventListener('click', handleSaveUserEdit);
     
-    // NEW: Reset Password Modal Listeners
+    // Reset Password Modal Listeners
     [resetPasswordModalCloseBtn, cancelResetPasswordBtn].forEach(btn => {
         btn.addEventListener('click', () => {
             resetPasswordModal.classList.add('hidden');
@@ -595,10 +600,10 @@ document.addEventListener('DOMContentLoaded', () => {
         manageTheme();
         await fetchUserInfo();
         await fetchAndStoreTeams();
+        await fetchAndStoreTags(); // [2025-12-03]
         await refreshUserList();
         await fetchDocumentsAndPermissions();
     }
 
     init();
 });
-

@@ -155,7 +155,10 @@ body.dark {
 .accordion-header:hover { background: var(--background-muted); }
 .accordion-icon { transition: transform var(--transition-smooth); color: var(--foreground-muted); }
 .accordion-header.collapsed .accordion-icon { transform: rotate(-90deg); }
-.accordion-content { padding: 0 1rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; overflow: hidden; transition: all var(--transition-smooth); max-height: 500px; opacity: 1; }
+
+/* FIXED: Increased max-height from 500px to 1200px to prevent clipping of file controls */
+.accordion-content { padding: 0 1rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.75rem; overflow: hidden; transition: all var(--transition-smooth); max-height: 1200px; opacity: 1; }
+
 .accordion-content.collapsed { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; }
 .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 1.5rem; text-align: center; cursor: pointer; transition: all var(--transition-smooth); background: var(--background); }
 .upload-zone:hover, .upload-zone.drag-over { border-color: var(--primary); background: var(--background-muted); transform: translateY(-2px); }
@@ -415,7 +418,15 @@ body.dark {
     max-width: 500px;
     border: 1px solid var(--border);
     animation: fadeInUp 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
 }
+
+/* [2025-12-03] New: Larger Modal Variant for Split Views */
+.modal-content.large {
+    max-width: 900px;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
@@ -438,12 +449,26 @@ body.dark {
     width: auto; /* Override inline styles */
 }
 
-/* --- 9. TEAM SELECTOR STYLES --- */
+/* --- 9. TEAM/TAG SELECTOR STYLES --- */
+/* [2025-12-03] New Layout for Split Config (Teams + Tags) */
+.upload-config-row {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.config-section {
+    flex: 1;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+}
+
 .team-selector-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    margin-top: 1rem;
+    margin-top: 0.5rem;
 }
 .team-list-box {
     display: flex;
@@ -478,8 +503,10 @@ body.dark {
     background-color: var(--background-muted);
 }
 #selected-teams-list .team-list-item:hover,
-#assigned-teams-list-modal .team-list-item:hover {
-    background-color: hsla(0, 84.2%, 60.2%, 0.1);
+#assigned-teams-list-modal .team-list-item:hover,
+#selected-tags-list .team-list-item:hover,
+#assigned-tags-list-modal .team-list-item:hover {
+    background-color: hsla(0, 84.2%, 60.2%, 0.1); /* Remove color */
 }
 
 .hidden { display: none; }
@@ -516,4 +543,3 @@ body.dark {
         height: 70vh; 
     } 
 }
-
