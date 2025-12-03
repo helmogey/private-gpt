@@ -57,6 +57,18 @@ def get_branding_info():
     logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg")
     return JSONResponse(content={"appName": app_name, "logoUrl": logo_url})
 
+# --- [2025-12-03] New Endpoint to Expose Valid Tags ---
+@api_router.get("/tags")
+def get_tags():
+    """
+    [2025-12-03] Returns the list of valid tags/categories from the environment.
+    Used by the frontend to populate upload dropdowns and admin filters.
+    """
+    default_categories = "GENERAL,EMPLOYEE,SERVER,ZABBIX"
+    valid_categories_str = os.getenv("VALID_QUERY_CATEGORIES", default_categories)
+    valid_categories = [cat.strip().upper() for cat in valid_categories_str.split(',') if cat.strip()]
+    return JSONResponse(content=valid_categories)
+
 class Modes(str, Enum):
     RAG_MODE = "RAG"
     SEARCH_MODE = "Search"
@@ -104,8 +116,6 @@ def identify_query_category(chat_service: ChatService, user_query: str) -> str:
         
         # Load prompt from environment variable, fallback to default
         prompt_template = os.getenv("CATEGORY_CLASSIFICATION_PROMPT", default_prompt)
-        
-        # Handle potential literal newline characters if loaded from env (sometimes \n is read as literal slash n)
         prompt_template = prompt_template.replace('\\n', '\n')
         
         # Inject the user query into the template
@@ -198,21 +208,6 @@ def get_user_info(request: Request):
         "display_name": display_name,
         "teams": db_user['teams'] 
     })
-
-@api_router.get("/tags")
-def get_tags():
-    """
-    [2025-12-03] Returns the list of valid tags/categories from the environment.
-    Used by the frontend to populate upload dropdowns and admin filters.
-    """
-    default_categories = "GENERAL,EMPLOYEE,SERVER,ZABBIX"
-    # Read from .env, similar to how it's done in the classifier
-    valid_categories_str = os.getenv("VALID_QUERY_CATEGORIES", default_categories)
-    # Parse into a clean list
-    valid_categories = [cat.strip().upper() for cat in valid_categories_str.split(',') if cat.strip()]
-    
-    # --- FIX: Return the list directly, not wrapped in an object ---
-    return JSONResponse(content=valid_categories)
 
 @api_router.post("/user/update")
 async def handle_update_user(request: Request, body: UpdateUserBody):
@@ -342,25 +337,17 @@ async def chat(
             if any(team in get_document_teams(doc.doc_id) for team in user_teams)
         ]
 
-        # 2. [2025-12-03] Filter by Category Tag
-        # If category is not GENERAL, only show docs matching that tag
-        # if query_category != "GENERAL":
-        # Get IDs of documents that have the matching tag
+        # 2. [2025-12-03] Filter by Category Tag STRICTLY
+        # Even 'GENERAL' must match 'GENERAL' tag.
         tagged_doc_ids = get_docs_by_tag(query_category)
-            
+        
         # Intersection: Must be allowed AND have the tag
         allowed_docs = [doc for doc in allowed_docs if doc.doc_id in tagged_doc_ids]
-            
-        # If no docs found for specific category, the list becomes empty.
-        
         allowed_doc_ids = [doc.doc_id for doc in allowed_docs]
-        print(allowed_docs)
 
         if not allowed_doc_ids:
             # Check if it was empty because of strict filtering
-            msg = "You do not have access to any documents."
-            if query_category != "GENERAL":
-                msg = f"No documents found for category '{query_category}' that you have access to."
+            msg = f"No documents found for category '{query_category}' that you have access to."
                 
             async def empty_stream():
                 yield f"data: {json.dumps({'delta': msg})}\n\n"
@@ -391,13 +378,19 @@ async def chat(
         else:
             final_context_filter = None
             
-    # [2025-12-03] Admin filtering by Category
-    # If admin hasn't selected a specific file, apply the category filter to all docs
+    # [2025-12-03] Admin filtering by Category (Global RAG)
+    # If admin hasn't selected a specific file, apply the category filter strictly for Admin too.
     elif user_role == 'admin' and final_context_filter is None:
-        if query_category != "GENERAL":
-             tagged_doc_ids = get_docs_by_tag(query_category)
-             if tagged_doc_ids:
-                 final_context_filter = ContextFilter(docs_ids=tagged_doc_ids)
+         tagged_doc_ids = get_docs_by_tag(query_category)
+         
+         if tagged_doc_ids:
+             final_context_filter = ContextFilter(docs_ids=tagged_doc_ids)
+         else:
+             # Strict filtering: If no docs match the category, Admin gets no results.
+             msg = f"No documents found for category '{query_category}'."
+             async def empty_stream_admin():
+                yield f"data: {json.dumps({'delta': msg})}\n\n"
+             return StreamingResponse(empty_stream_admin(), media_type="text/event-stream")
 
     try:
         completion_gen = chat_service.stream_chat(
