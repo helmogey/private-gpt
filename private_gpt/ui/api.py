@@ -153,6 +153,8 @@ class ChatBody(BaseModel):
     mode: str = "RAG"
     context_filter: dict | None = None
     session_id: str | None = None
+    # [2025-12-14] Add category field for manual selection
+    category: str | None = "Default"
 
 class CreateUserBody(BaseModel):
     username: str
@@ -255,9 +257,17 @@ async def chat(
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
 
-    # [2025-12-03] Identify Query Category
-    query_category = identify_query_category(chat_service, last_message.content)
-    logger.info(f"Incoming Query: '{last_message.content}' | Identified Category: {query_category}")
+    # [2025-12-14] Determine Category Logic
+    # If user selected a category manually (not Default), use it.
+    # Otherwise, use the LLM to identify the category.
+    user_selected_category = chat_body.category
+    
+    if user_selected_category and user_selected_category.upper() != "DEFAULT":
+        query_category = user_selected_category.upper()
+        logger.info(f"Incoming Query: '{last_message.content}' | Manual Category: {query_category}")
+    else:
+        query_category = identify_query_category(chat_service, last_message.content)
+        logger.info(f"Incoming Query: '{last_message.content}' | Identified Category (Auto): {query_category}")
 
     # Save the original user message to the database before modifying it
     session_id = chat_body.session_id
@@ -459,7 +469,16 @@ async def upload_files(
             ingested_docs_info.append((str(file.filename), temp_path))
 
         if ingested_docs_info:
-            ingested_docs = ingest_service.bulk_ingest(ingested_docs_info)
+            # [2025-12-03] Added specific error handling for ingestion failures (e.g. Model Context Window Exceeded)
+            try:
+                ingested_docs = ingest_service.bulk_ingest(ingested_docs_info)
+            except Exception as e:
+                logger.error(f"Ingestion failed: {e}")
+                msg = f"Ingestion failed: {str(e)}"
+                if "size of tensor a" in str(e) and "must match the size of tensor b" in str(e):
+                    msg += " (Hint: Your document chunks might be too large for the embedding model. Try reducing 'chunk_size' in settings.yaml)"
+                raise HTTPException(status_code=500, detail=msg)
+
             team_list = json.loads(teams)
             tag_list = json.loads(tags) # [2025-12-03] Parse tags
             

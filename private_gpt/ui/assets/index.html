@@ -73,7 +73,17 @@
                     <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="m7 10 5 5 5-5z"/></svg>
                 </h2>
                 <div class="accordion-content collapsed">
+                    <!-- New Category Selector -->
+                    <div class="mode-selector" style="margin-bottom: 1rem;">
+                        <label for="chat-category-select" style="font-weight: 500;">Query Category</label>
+                        <select id="chat-category-select" class="textbox">
+                            <option value="Default" selected>Default (Auto-Detect)</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    
                     <div class="mode-selector">
+                        <label style="font-weight: 500; margin-bottom: 0.25rem;">Mode</label>
                         <label><input type="radio" name="mode" value="RAG" checked> RAG Mode</label>
                         <label><input type="radio" name="mode" value="Search"> Search Mode</label>
                     </div>

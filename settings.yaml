@@ -63,6 +63,8 @@ rag:
   #This value controls how many "top" documents the RAG returns to use in the context.
   #similarity_value: 0.45
   #This value is disabled by default.  If you enable this settings, the RAG will only use articles that meet a certain percentage score.
+  chunk_size: 1024
+  chunk_overlap: 50
   rerank:
     enabled: True
     model: cross-encoder/ms-marco-MiniLM-L-2-v2

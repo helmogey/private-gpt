@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const newChatBtn = document.getElementById('new-chat-btn');
     const chatTitle = document.getElementById('chat-title');
     
+    // [2025-12-14] New Category Dropdown
+    const chatCategorySelect = document.getElementById('chat-category-select');
+    
     // Upload Modal Elements (Teams & Tags)
     const tagModal = document.getElementById('tag-modal');
     const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
@@ -202,6 +205,9 @@ document.addEventListener('DOMContentLoaded', () => {
             chatHistory = [];
         }
 
+        // [2025-12-14] Get selected category
+        const selectedCategory = chatCategorySelect ? chatCategorySelect.value : 'Default';
+
         clearTimeout(inactivityTimerId);
         appendMessage('user', message);
         chatHistory.push({ role: 'user', content: message });
@@ -220,7 +226,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     messages: chatHistory,
                     mode: currentMode,
                     context_filter: selectedFile ? { docs_ids: [selectedFile] } : null,
-                    session_id: currentSessionId
+                    session_id: currentSessionId,
+                    category: selectedCategory // Pass the category
                 }),
             });
              if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -330,7 +337,6 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteSelectedBtn.disabled = true;
     }
 
-    // --- [2025-12-03] Updated Upload to include Tags ---
     async function handleFileUpload(files, teams, tags) {
         if (files.length === 0 || isUploading) return;
         isUploading = true;
@@ -548,7 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // [2025-12-03] New Tag Fetcher
     async function fetchTags() {
         try {
             const response = await fetch('/api/tags');
@@ -575,6 +580,26 @@ document.addEventListener('DOMContentLoaded', () => {
     function moveItem(element, fromList, toList) {
         fromList.removeChild(element);
         toList.appendChild(element);
+    }
+
+    // --- [2025-12-14] Populate Chat Category Dropdown ---
+    async function populateChatCategories() {
+        if (!chatCategorySelect) return;
+        
+        try {
+            const tags = await fetchTags();
+            // Clear existing options, but keep the default one
+            chatCategorySelect.innerHTML = '<option value="Default" selected>Default (Auto-Detect)</option>';
+            
+            tags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag;
+                option.textContent = tag;
+                chatCategorySelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error populating chat categories:', error);
+        }
     }
 
     // --- Profile Settings Functions ---
@@ -744,7 +769,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Generic Selector Event Listeners ---
-    // Using event delegation for both Teams and Tags lists
     [
         { available: availableTeamsList, selected: selectedTeamsList },
         { available: availableTagsList, selected: selectedTagsList }
@@ -771,4 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSessionTimeout();
     loadInitialChat();
     fetchAndSetBranding();
+    
+    // [2025-12-14] Call to populate chat dropdown
+    populateChatCategories();
 });
