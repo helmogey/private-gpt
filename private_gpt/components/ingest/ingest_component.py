@@ -76,7 +76,7 @@ class BaseIngestComponentWithIndex(BaseIngestComponent, abc.ABC):
             index = load_index_from_storage(
                 storage_context=self.storage_context,
                 store_nodes_override=True,  # Force store nodes in index and document stores
-                show_progress=self.show_progress,
+                #show_progress=self.show_progress,
                 embed_model=self.embed_model,
                 transformations=self.transformations,
             )
@@ -87,7 +87,7 @@ class BaseIngestComponentWithIndex(BaseIngestComponent, abc.ABC):
                 [],
                 storage_context=self.storage_context,
                 store_nodes_override=True,  # Force store nodes in index and document stores
-                show_progress=self.show_progress,
+                #show_progress=self.show_progress,
                 embed_model=self.embed_model,
                 transformations=self.transformations,
             )
@@ -139,7 +139,7 @@ class SimpleIngestComponent(BaseIngestComponentWithIndex):
         logger.debug("Transforming count=%s documents into nodes", len(documents))
         with self._index_thread_lock:
             for document in documents:
-                self._index.insert(document, show_progress=True)
+                self._index.insert(document)#, show_progress=True)
             logger.debug("Persisting the index and nodes")
             # persist the index and nodes
             self._save_index()
@@ -204,12 +204,12 @@ class BatchIngestComponent(BaseIngestComponentWithIndex):
         nodes = run_transformations(
             documents,  # type: ignore[arg-type]
             self.transformations,
-            show_progress=self.show_progress,
+            #show_progress=self.show_progress,
         )
         # Locking the index to avoid concurrent writes
         with self._index_thread_lock:
             logger.info("Inserting count=%s nodes in the index", len(nodes))
-            self._index.insert_nodes(nodes, show_progress=True)
+            self._index.insert_nodes(nodes)#, show_progress=True)
             for document in documents:
                 self._index.docstore.set_document_hash(
                     document.get_doc_id(), document.hash
@@ -286,12 +286,12 @@ class ParallelizedIngestComponent(BaseIngestComponentWithIndex):
         nodes = run_transformations(
             documents,  # type: ignore[arg-type]
             self.transformations,
-            show_progress=self.show_progress,
+            #show_progress=self.show_progress,
         )
         # Locking the index to avoid concurrent writes
         with self._index_thread_lock:
             logger.info("Inserting count=%s nodes in the index", len(nodes))
-            self._index.insert_nodes(nodes, show_progress=True)
+            self._index.insert_nodes(nodes) #, show_progress=True)
             for document in documents:
                 self._index.docstore.set_document_hash(
                     document.get_doc_id(), document.hash
@@ -401,7 +401,7 @@ class PipelineIngestComponent(BaseIngestComponentWithIndex):
             nodes = run_transformations(
                 documents,  # type: ignore[arg-type]
                 self.transformations,
-                show_progress=self.show_progress,
+                #show_progress=self.show_progress,
             )
             self.node_q.put(("process", file_name, documents, list(nodes)))
         finally:

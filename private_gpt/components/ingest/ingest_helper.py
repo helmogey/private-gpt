@@ -96,7 +96,29 @@ class IngestionHelper:
 
         # Sanitize NUL bytes in text which can't be stored in Postgres
         for i in range(len(documents)):
-            documents[i].text = documents[i].text.replace("\u0000", "")
+            # --- FIX: Use excluded_embed_metadata_keys or just create new TextNode if setter is missing ---
+            # Ideally use document.text = ... but if setter is missing:
+            original_text = documents[i].text
+            if "\u0000" in original_text:
+                 # Check if set_content exists (it should in v0.10+ unless it's a legacy object)
+                 # But since the error says 'no setter', let's try the safest route:
+                 # Re-creating the document with sanitized text.
+                 # Preserving metadata/id is crucial.
+                 sanitized_text = original_text.replace("\u0000", "")
+                 # Note: If Document is Pydantic, we might be able to set it via __dict__ or constructed.
+                 # The standard LlamaIndex way to update text is usually creating a new object if immutable.
+                 
+                 # Trying creating a new Document to be safe and compatible with immutable properties
+                 new_doc = Document(
+                     text=sanitized_text,
+                     metadata=documents[i].metadata,
+                     excluded_embed_metadata_keys=documents[i].excluded_embed_metadata_keys,
+                     excluded_llm_metadata_keys=documents[i].excluded_llm_metadata_keys,
+                     relationships=documents[i].relationships,
+                 )
+                 # Keep the same ID!
+                 new_doc.id_ = documents[i].id_ 
+                 documents[i] = new_doc
 
         return documents
 
