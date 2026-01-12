@@ -32,6 +32,7 @@ llama-index-embeddings-azure-openai = {version ="*", optional = true}
 llama-index-embeddings-gemini = {version ="*", optional = true}
 llama-index-embeddings-mistralai = {version ="*", optional = true}
 llama-index-vector-stores-qdrant = {version ="*", optional = true}
+qdrant-client = {version = ">=1.7.0,<1.11.0", optional = true}
 llama-index-vector-stores-milvus = {version ="*", optional = true}
 llama-index-vector-stores-chroma = {version ="*", optional = true}
 llama-index-vector-stores-postgres = {version ="*", optional = true}
@@ -81,7 +82,7 @@ embeddings-sagemaker = ["boto3"]
 embeddings-azopenai = ["llama-index-embeddings-azure-openai"]
 embeddings-gemini = ["llama-index-embeddings-gemini"]
 embeddings-mistral = ["llama-index-embeddings-mistralai"]
-vector-stores-qdrant = ["llama-index-vector-stores-qdrant"]
+vector-stores-qdrant = ["llama-index-vector-stores-qdrant", "qdrant-client"]
 vector-stores-clickhouse = ["llama-index-vector-stores-clickhouse", "clickhouse_connect"]
 vector-stores-chroma = ["llama-index-vector-stores-chroma"]
 vector-stores-postgres = ["llama-index-vector-stores-postgres"]

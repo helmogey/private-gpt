@@ -1,110 +1,52 @@
 services:
-
-  #-----------------------------------
-  #---- Private-GPT services ---------
-  #-----------------------------------
-
-  # Private-GPT service for the Ollama CPU and GPU modes
-  # This service builds from an external Dockerfile and runs the Ollama mode.
-  private-gpt-ollama:
-    image: ${PGPT_IMAGE:-zylonai/private-gpt}:${PGPT_TAG:-0.6.2}-ollama  # x-release-please-version
-    user: root
+  private-gpt-app:
     build:
       context: .
-      dockerfile: Dockerfile.ollama
-    volumes:
-      - ./local_data:/home/worker/app/local_data
+      dockerfile: Dockerfile
+    image: private-gpt-gpu:latest
+    
     ports:
       - "8001:8001"
-    environment:
-      PORT: 8001
-      PGPT_PROFILES: docker
-      PGPT_MODE: ollama
-      PGPT_EMBED_MODE: ollama
-      PGPT_OLLAMA_API_BASE: http://ollama:11434
-      HF_TOKEN: ${HF_TOKEN:-}
-    profiles:
-      - ""
-      - ollama-cpu
-      - ollama-cuda
-      - ollama-api
-    depends_on:
-      ollama:
-        condition: service_healthy
 
-  # Private-GPT service for the local mode
-  # This service builds from a local Dockerfile and runs the application in local mode.
-  private-gpt-llamacpp-cpu:
-    image: ${PGPT_IMAGE:-zylonai/private-gpt}:${PGPT_TAG:-0.6.2}-llamacpp-cpu # x-release-please-version
-    user: root
-    build:
-      context: .
-      dockerfile: Dockerfile.llamacpp-cpu
-    volumes:
-      - ./local_data/:/home/worker/app/local_data
-      - ./models/:/home/worker/app/models
-    entrypoint: sh -c ".venv/bin/python scripts/setup && .venv/bin/python -m private_gpt"
-    ports:
-      - "8001:8001"
-    environment:
-      PORT: 8001
-      PGPT_PROFILES: local
-      HF_TOKEN: ${HF_TOKEN:-}
-    profiles:
-      - llamacpp-cpu
-
-  #-----------------------------------
-  #---- Ollama services --------------
-  #-----------------------------------
-
-  # Traefik reverse proxy for the Ollama service
-  # This will route requests to the Ollama service based on the profile.
-  ollama:
-    image: traefik:v2.10
-    healthcheck:
-      test: ["CMD", "sh", "-c", "wget -q --spider http://ollama:11434 || exit 1"]
-      interval: 10s
-      retries: 3
-      start_period: 5s
-      timeout: 5s
-    ports:
-      - "8080:8080"
-    command:
-      - "--providers.file.filename=/etc/router.yml"
-      - "--log.level=ERROR"
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:11434"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./.docker/router.yml:/etc/router.yml:ro
+    # Allow container to reach host (Ollama) via host.docker.internal
+    # (Kept for reference, but we are using IP directly below)
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    profiles:
-      - ""
-      - ollama-cpu
-      - ollama-cuda
-      - ollama-api
 
-  # Ollama service for the CPU mode
-  ollama-cpu:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
     volumes:
-      - ./models:/root/.ollama
-    profiles:
-      - ""
-      - ollama-cpu
+      - ./local_data:/home/worker/app/local_data
+      # CHANGED: Mount the settings.yaml file so changes take effect!
+      - ./settings.yaml:/home/worker/app/settings.yaml
 
-  # Ollama service for the CUDA mode
-  ollama-cuda:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ./models:/root/.ollama
+    environment:
+      PORT: 8001
+      # CRITICAL FIX: Commented out the 'docker' profile.
+      # This prevents the built-in 'settings-docker.yaml' from overriding 
+      # our custom settings (like context window) and causing the crash.
+      # PGPT_PROFILES: docker
+      
+      PGPT_MODE: ollama
+      PGPT_EMBED_MODE: ollama
+      
+      # FIXED: Use IP directly to bypass DNS resolution failure [Errno -3]
+      # 172.17.0.1 is the standard host gateway IP on Linux Docker
+      PGPT_OLLAMA__API_BASE: http://172.17.0.1:11434
+      PGPT_OLLAMA__EMBEDDING_API_BASE: http://172.17.0.1:11434
+      
+      # FIXED: Force critical settings via Env Vars to bypass file profile conflicts
+      
+      # 1. Force chunk size to 256 (Ultra-safe for 2048 context limit)
+      PGPT_RAG__CHUNK_SIZE: 256
+      # 2. Force chunk overlap
+      PGPT_RAG__CHUNK_OVERLAP: 20
+      
+      # 3. Force Ollama context limit to 2048 (Matches n_ctx_train hard limit)
+      PGPT_OLLAMA__OPTIONS__NUM_CTX: 2048
+      
+      # 4. Sync LLM context window to avoid mismatches
+      PGPT_LLM__CONTEXT_WINDOW: 2048
+      
+    # GPU Access
     deploy:
       resources:
         reservations:
@@ -112,5 +54,3 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    profiles:
-      - ollama-cuda
