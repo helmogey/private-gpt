@@ -4,7 +4,7 @@ from injector import Injector
 from fastapi import Depends, FastAPI, Request, Response, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles  # Added import
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable
@@ -19,8 +19,7 @@ from private_gpt.server.embeddings.embeddings_router import embeddings_router
 from private_gpt.server.health.health_router import health_router
 from private_gpt.server.ingest.ingest_router import ingest_router
 from private_gpt.settings.settings import Settings
-from private_gpt.database import init_db, get_user, verify_password
-# Import your custom API router
+from private_gpt.database import init_db, get_user, verify_password, get_llm_config
 from private_gpt.ui.api import api_router
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,6 @@ if not os.path.exists(ASSETS_PATH):
         logger.error(f"Contents of {parent}: {os.listdir(parent)}")
 else:
     logger.info(f"Assets directory found. Contents: {os.listdir(ASSETS_PATH)}")
-
 
 # Both static files and templates are in the same folder
 templates = Jinja2Templates(directory=str(ASSETS_PATH))
@@ -69,6 +67,18 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 def create_app(root_injector: Injector) -> FastAPI:
     load_dotenv()
     init_db() 
+    
+    # --- NEW: Patch Environment with DB Config BEFORE Settings are injected ---
+    config = get_llm_config()
+    if config:
+        os.environ["LLM_MODE"] = config.get("llm_provider", "ollama").lower()
+        if config.get("llm_provider") == "Ollama":
+            os.environ["OLLAMA_API_BASE"] = config.get("llm_url", "")
+            os.environ["OLLAMA_MODEL"] = config.get("llm_model", "")
+        elif config.get("llm_provider") == "Gemini":
+            os.environ["GOOGLE_API_KEY"] = config.get("llm_token", "")
+            os.environ["GEMINI_MODEL"] = config.get("llm_model", "")
+
     async def bind_injector_to_request(request: Request) -> None:
         request.state.injector = root_injector
 
@@ -90,7 +100,6 @@ def create_app(root_injector: Injector) -> FastAPI:
         app_logo_url = os.getenv("APP_LOGO_URL_Black", "/assets/NEC-Logo.svg") 
         return templates.TemplateResponse("login.html", {"request": request, "app_name": app_name, "app_logo_url": app_logo_url})
         
-
     @app.post("/login", tags=["UI"])
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
         db_user = get_user(username.lower())

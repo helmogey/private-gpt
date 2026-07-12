@@ -9,8 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tab elements
     const userManagementTab = document.getElementById('user-management-tab');
     const docManagementTab = document.getElementById('doc-management-tab');
+    const llmConfigTab = document.getElementById('llm-config-tab'); // Added
     const userManagementContent = document.getElementById('user-management-content');
     const docManagementContent = document.getElementById('doc-management-content');
+    const llmConfigContent = document.getElementById('llm-config-content'); // Added
 
     // User Management elements
     const createUserForm = document.getElementById('create-user-form');
@@ -40,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveResetPasswordBtn = document.getElementById('save-reset-password-btn');
     const resetPasswordStatus = document.getElementById('reset-password-status');
 
-
     // Document Management elements
     const docList = document.getElementById('doc-list');
     const permissionsModal = document.getElementById('permissions-modal');
@@ -57,6 +58,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const cancelPermissionsBtn = document.getElementById('cancel-permissions-btn');
     const savePermissionsBtn = document.getElementById('save-permissions-btn');
+
+    // --- LLM Config Elements (Added) ---
+    const llmProviderSelect = document.getElementById('llm-provider');
+    const llmUrlGroup = document.getElementById('llm-url-group');
+    const llmTokenGroup = document.getElementById('llm-token-group');
+    const llmUrlInput = document.getElementById('llm-url');
+    const llmTokenInput = document.getElementById('llm-token');
+    const fetchModelsBtn = document.getElementById('fetch-models-btn');
+    const llmModelSelect = document.getElementById('llm-model-select');
+    const saveLlmBtn = document.getElementById('save-llm-btn');
+    const fetchModelsStatus = document.getElementById('fetch-models-status');
+    const saveLlmStatus = document.getElementById('save-llm-status');
 
     // --- State Variables ---
     let currentUsername = null;
@@ -83,20 +96,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'An unknown error occurred.';
     }
 
-    // --- Tab Navigation ---
+    // --- Tab Navigation (Updated for multiple tabs) ---
     function setupTabs() {
-        userManagementTab.addEventListener('click', () => {
-            userManagementTab.classList.add('active');
-            docManagementTab.classList.remove('active');
-            userManagementContent.classList.add('active');
-            docManagementContent.classList.remove('active');
-        });
+        const tabs = [userManagementTab, docManagementTab, llmConfigTab];
+        const panes = [userManagementContent, docManagementContent, llmConfigContent];
 
-        docManagementTab.addEventListener('click', () => {
-            docManagementTab.classList.add('active');
-            userManagementTab.classList.remove('active');
-            docManagementContent.classList.add('active');
-            userManagementContent.classList.remove('active');
+        tabs.forEach((tab, index) => {
+            if (!tab) return;
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t?.classList.remove('active'));
+                panes.forEach(p => p?.classList.remove('active'));
+                
+                tab.classList.add('active');
+                if (panes[index]) panes[index].classList.add('active');
+
+                // Load existing config when LLM tab is opened
+                if (tab.id === 'llm-config-tab') loadCurrentLLMConfig();
+            });
         });
     }
 
@@ -478,6 +494,97 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error resetting password:', error);
             showStatus(error.message, 'error', resetPasswordStatus);
+        }
+    }
+
+    // --- LLM Config Logic (Added) ---
+    if (llmProviderSelect) {
+        llmProviderSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'Ollama') {
+                llmUrlGroup.style.display = 'flex';
+                llmTokenGroup.style.display = 'none';
+            } else {
+                llmUrlGroup.style.display = 'none';
+                llmTokenGroup.style.display = 'flex';
+            }
+            llmModelSelect.innerHTML = '<option value="">Fetch models first...</option>';
+            llmModelSelect.disabled = true;
+            saveLlmBtn.disabled = true;
+        });
+
+        fetchModelsBtn.addEventListener('click', async () => {
+            const provider = llmProviderSelect.value;
+            const url = llmUrlInput.value;
+            const token = llmTokenInput.value;
+
+            try {
+                showStatus('Fetching models...', 'loading', fetchModelsStatus);
+                const response = await fetch('/api/admin/llm/models', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider, url, token })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Failed to fetch models');
+
+                llmModelSelect.innerHTML = '';
+                data.models.forEach(model => {
+                    const opt = document.createElement('option');
+                    opt.value = model;
+                    opt.textContent = model;
+                    llmModelSelect.appendChild(opt);
+                });
+                llmModelSelect.disabled = false;
+                saveLlmBtn.disabled = false;
+                showStatus('Models loaded successfully', 'success', fetchModelsStatus);
+            } catch (error) {
+                showStatus(error.message, 'error', fetchModelsStatus);
+            }
+        });
+
+        saveLlmBtn.addEventListener('click', async () => {
+            try {
+                showStatus('Saving configuration...', 'loading', saveLlmStatus);
+                const response = await fetch('/api/admin/llm/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        provider: llmProviderSelect.value,
+                        url: llmUrlInput.value,
+                        token: llmTokenInput.value,
+                        model: llmModelSelect.value
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Failed to save config');
+                
+                showStatus(data.message, 'success', saveLlmStatus);
+            } catch (error) {
+                showStatus(error.message, 'error', saveLlmStatus);
+            }
+        });
+    }
+
+    async function loadCurrentLLMConfig() {
+        try {
+            const response = await fetch('/api/admin/llm/config');
+            if (!response.ok) return;
+            const data = await response.json();
+            
+            if (data && data.llm_provider) {
+                llmProviderSelect.value = data.llm_provider;
+                llmProviderSelect.dispatchEvent(new Event('change'));
+                
+                if (data.llm_url) llmUrlInput.value = data.llm_url;
+                if (data.llm_token) llmTokenInput.value = data.llm_token;
+                
+                llmModelSelect.innerHTML = `<option value="${data.llm_model}">${data.llm_model}</option>`;
+                llmModelSelect.disabled = false;
+                saveLlmBtn.disabled = false;
+            }
+        } catch (error) {
+            console.error("Could not load LLM config", error);
         }
     }
 

@@ -31,12 +31,9 @@ ui:
   delete_all_files_button_enabled: true
 
 llm:
-  mode: ollama
+  mode: ${LLM_MODE:ollama}
   prompt_style: "llama3"
   max_new_tokens: 1024
-  # FIXED: Set to 8192.
-  # "nomic-embed-text-v1.5" supports 8192 context. 
-  # This maximizes the chance of fitting large/dense chunks that might be causing the error.
   context_window: 8192
   temperature: 0.1
   n_gpu_layers: -1
@@ -117,20 +114,14 @@ openai:
   embedding_api_key: ${OPENAI_API_KEY:}
 
 ollama:
-  llm_model: llama3.1
+  llm_model: ${OLLAMA_MODEL:llama3.1}
   embedding_model: nomic-embed-text
-  # CRITICAL: You MUST run 'OLLAMA_HOST=0.0.0.0 ollama serve' on your host for this to work.
-  api_base: ${OLLAMA_API_BASE:http://172.18.0.1:11434}
-  embedding_api_base: ${OLLAMA_API_BASE:http://172.18.0.1:11434}
+  api_base: ${OLLAMA_API_BASE:http://127.0.0.1:11434}
+  embedding_api_base: ${OLLAMA_API_BASE:http://127.0.0.1:11434}
   keep_alive: 5m
   request_timeout: 1800.0
   autopull_models: true
   options:
-    # FIXED: Set to 8192.
-    # The error "input length exceeds context length" happens when the text chunk 
-    # is larger than what Ollama has allocated for the model. 
-    # Raising this to 8192 (supported by nomic-embed-text-v1.5) ensures 
-    # even complex or dense chunks fit successfully.
     num_ctx: 8192
 
 azopenai:
@@ -144,5 +135,6 @@ azopenai:
 
 gemini:
   api_key: ${GOOGLE_API_KEY:}
-  model: models/gemini-pro
+  model: ${GEMINI_MODEL:models/gemini-pro}
   embedding_model: models/embedding-001
+

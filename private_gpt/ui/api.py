@@ -12,6 +12,9 @@ from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, HTTPExc
 from fastapi.responses import StreamingResponse, JSONResponse
 from llama_index.core.llms import ChatMessage, MessageRole
 from pydantic import BaseModel
+import httpx
+import google.generativeai as genai
+from private_gpt.database import get_llm_config, save_llm_config
 
 from private_gpt.open_ai.extensions.context_filter import ContextFilter
 from private_gpt.database import (
@@ -180,6 +183,17 @@ class DocumentPermissionBody(BaseModel):
     file_name: str
     teams: List[str]
     tags: List[str] = [] # [2025-12-03] New Field for admin update
+
+class LLMModelsRequest(BaseModel):
+    provider: str
+    url: str | None = None
+    token: str | None = None
+
+class LLMConfigRequest(BaseModel):
+    provider: str
+    url: str | None = None
+    token: str | None = None
+    model: str
 
 # --- UI Session & User Info Endpoints ---
 
@@ -683,3 +697,40 @@ async def handle_delete_user(username: str, request: Request):
     except Exception as e:
         logger.error(f"Error deleting user '{username}': {e}")
         raise HTTPException(status_code=500, detail="Internal server error while deleting user.")
+
+
+
+@api_router.get("/admin/llm/config", dependencies=[Depends(require_admin)])
+async def fetch_current_llm_config():
+    config = get_llm_config()
+    return JSONResponse(content=config or {})
+
+@api_router.post("/admin/llm/models", dependencies=[Depends(require_admin)])
+async def fetch_llm_models(body: LLMModelsRequest):
+    if body.provider == "Ollama":
+        try:
+            url = body.url.rstrip('/') if body.url else "http://localhost:11434"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{url}/api/tags", timeout=5.0)
+                resp.raise_for_status()
+                models = [m["name"] for m in resp.json().get("models", [])]
+                return JSONResponse(content={"models": models})
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Ollama connection failed: {str(e)}")
+    
+    elif body.provider == "Gemini":
+        try:
+            if not body.token:
+                raise ValueError("Token is required for Gemini.")
+            genai.configure(api_key=body.token)
+            models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+            return JSONResponse(content={"models": models})
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Gemini connection failed: {str(e)}")
+            
+    raise HTTPException(status_code=400, detail="Invalid provider")
+
+@api_router.post("/admin/llm/config", dependencies=[Depends(require_admin)])
+async def save_llm_cfg(body: LLMConfigRequest):
+    save_llm_config(body.provider, body.url, body.token, body.model)
+    return JSONResponse(content={"message": "LLM Configuration saved! Please restart PrivateGPT to apply changes globally."})

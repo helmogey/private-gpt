@@ -9,6 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- SweetAlert2 for beautiful, non-blocking popups -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
     <div id="main-container">
@@ -46,43 +49,47 @@
                         </div>
                         <div id="upload-status" class="upload-status"></div>
                     </div>
+                    
                     <div class="file-section">
                         <h3>Ingested Files</h3>
                         <div class="file-list-container">
                             <ul id="file-list" class="file-list"></ul>
                         </div>
                     </div>
+                    
                     <div class="file-section">
-                        <h3>Selected File</h3>
+                        <h3>Selected Context File</h3>
                         <input type="text" id="selected-file-text" class="textbox" value="All files" readonly>
                     </div>
-                    <div id="file-action-controls" class="hidden-by-role">
-                        <div class="file-actions" id="file-actions-buttons">
-                            <button id="deselect-btn" class="icon-button" disabled title="Deselect File"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg></button>
-                            <button id="delete-selected-btn" class="icon-button" disabled title="Delete Selected File"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg></button>
-                            <button id="delete-all-btn" class="icon-button destructive" title="Delete All Files"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2C13.1,2 14,2.9 14,4C14,5.1 13.1,6 12,6C10.9,6 10,5.1 10,4C10,2.9 10.9,2 12,2M21,9V7L15,1H5C3.89,1 3,1.89 3,3V19A2,2 0 0,0 5,21H11V19H5V3H14V8H19V9H21M15.5,12L18.5,9H16.5V4H14.5V9H12.5L15.5,12Z"/></svg></button>
-                        </div>
+                    
+                    <!-- File Action Controls -->
+                    <div id="file-action-controls" class="file-actions hidden-by-role" style="margin-top: 0.25rem;">
+                        <button id="deselect-btn" class="icon-button" disabled title="Deselect Context File">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"/></svg>
+                        </button>
+                        <button id="delete-selected-btn" class="icon-button" title="Delete Checked Files">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
+                        </button>
+                        <button id="delete-all-btn" class="icon-button destructive" title="Delete All Files">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12,2C13.1,2 14,2.9 14,4C14,5.1 13.1,6 12,6C10.9,6 10,5.1 10,4C10,2.9 10.9,2 12,2M21,9V7L15,1H5C3.89,1 3,1.89 3,3V19A2,2 0 0,0 5,21H11V19H5V3H14V8H19V9H21M15.5,12L18.5,9H16.5V4H14.5V9H12.5L15.5,12Z"/></svg>
+                        </button>
                     </div>
                 </div>
             </section>
 
-            <!-- Chat Settings Section (Visible to All) -->
             <section class="accordion" id="chat-settings-section">
                 <h2 class="accordion-header collapsed" onclick="toggleAccordion(this)">
                     <span>⚙️ Chat Settings</span>
                     <svg class="accordion-icon" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="m7 10 5 5 5-5z"/></svg>
                 </h2>
                 <div class="accordion-content collapsed">
-                    <!-- New Category Selector (Visible to All) -->
-                    <div class="mode-selector" style="margin-bottom: 1rem;">
+                    <div class="mode-selector" style="margin-bottom: 0.5rem;">
                         <label for="chat-category-select" style="font-weight: 500;">Query Category</label>
                         <select id="chat-category-select" class="textbox">
                             <option value="Default" selected>Default (Auto-Detect)</option>
-                            <!-- Options will be populated by JS -->
                         </select>
                     </div>
                     
-                    <!-- Mode Selector (Restricted to Admin via hidden-by-role) -->
                     <div class="mode-selector hidden-by-role">
                         <label style="font-weight: 500; margin-bottom: 0.25rem;">Mode</label>
                         <label><input type="radio" name="mode" value="RAG" checked> RAG Mode</label>
@@ -123,6 +130,7 @@
                     </div>
                 </div>
             </div>
+            
             <div id="chatbot">
                 <div class="welcome-message" id="welcome-message">
                     <h2 id="welcome-header"></h2>
@@ -133,6 +141,7 @@
                     <p>Start a conversation by typing a message below.</p>
                 </div>
             </div>
+            
             <div class="chat-input-container">
                 <div class="chat-actions"><button id="clear-btn" class="chat-action-button" title="Clear Chat"><svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19.36,2.72L20.78,4.14L15.06,9.85C16.13,11.39 16.28,13.24 15.38,14.44L9.06,8C10.26,7.1 12.11,7.25 13.65,8.32L19.36,2.72M5.93,17.57C3.92,15.56 2.69,13.16 2.24,10.55L10.6,18.9C13.21,19.35 15.61,18.12 17.62,16.11L5.93,17.57Z"/></svg></button></div>
                 <div class="input-wrapper">
@@ -168,9 +177,8 @@
         </div>
     </div>
     
-    <!-- Updated Upload Modal (Teams + Tags) -->
     <div id="tag-modal" class="modal-backdrop hidden">
-        <div class="modal-content large"> <!-- Added 'large' class for wider modal -->
+        <div class="modal-content large">
             <div class="modal-header">
                 <h2>📄 Upload Configuration</h2>
                 <button id="tag-modal-close-btn" class="theme-toggle">&times;</button>
@@ -179,7 +187,6 @@
                 <p class="form-hint" style="margin-top:0; margin-bottom: 1rem;">Configure access (Teams) and categorization (Tags) for the uploaded document(s).</p>
                 
                 <div class="upload-config-row">
-                    <!-- Team Selector -->
                     <div class="config-section">
                         <h3>Assign Teams</h3>
                         <div class="team-selector-container">
@@ -194,7 +201,6 @@
                         </div>
                     </div>
 
-                    <!-- Tag Selector -->
                     <div class="config-section">
                         <h3>Assign Category Tags</h3>
                         <div class="team-selector-container">

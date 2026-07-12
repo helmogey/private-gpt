@@ -21,23 +21,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const newChatBtn = document.getElementById('new-chat-btn');
     const chatTitle = document.getElementById('chat-title');
     
-    // [2025-12-14] New Category Dropdown
     const chatCategorySelect = document.getElementById('chat-category-select');
     
-    // Upload Modal Elements (Teams & Tags)
     const tagModal = document.getElementById('tag-modal');
     const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
     
     const availableTeamsList = document.getElementById('available-teams-list');
     const selectedTeamsList = document.getElementById('selected-teams-list');
-    
     const availableTagsList = document.getElementById('available-tags-list');
     const selectedTagsList = document.getElementById('selected-tags-list');
     
     const cancelUploadBtn = document.getElementById('cancel-upload-btn');
     const confirmUploadBtn = document.getElementById('confirm-upload-btn');
     
-    // Profile & Admin Modal Elements
     const profileBtn = document.getElementById('profile-btn');
     const profileDropdown = document.getElementById('profile-dropdown');
     const profileUsername = document.getElementById('profile-username');
@@ -50,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const profileEmailInput = document.getElementById('profile-email');
     const profileNewPasswordInput = document.getElementById('profile-new-password');
     const profileSettingsStatus = document.getElementById('profile-settings-status');
-
 
     // --- State Variables ---
     let chatHistory = [];
@@ -66,11 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Utility Functions ---
     function autoResizeTextarea(textarea) {
+        if (!textarea) return;
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
     }
 
     function showStatus(message, type = 'info', element = uploadStatus) {
+        if (!element) return;
         element.textContent = message;
         element.className = `upload-status ${type}`;
         element.style.display = 'block';
@@ -80,11 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateUploadProgress(percent) {
+        if (!uploadProgress || !uploadProgressBar) return;
         uploadProgress.classList.toggle('visible', percent > 0 && percent < 100);
         uploadProgressBar.style.width = `${percent}%`;
     }
 
     function setButtonLoading(button, loading) {
+        if (!button) return;
         button.classList.toggle('loading', loading);
         button.disabled = loading;
     }
@@ -136,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function refreshChatList() {
+        if (!chatList) return;
         chatList.innerHTML = '';
         try {
             const response = await fetch('/api/chats');
@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory = [];
         clearChat(false);
         const sessionElement = document.querySelector(`.chat-session[data-session-id="${sessionId}"]`);
-        if (sessionElement) {
+        if (sessionElement && chatTitle) {
             chatTitle.textContent = sessionElement.textContent;
         }
 
@@ -192,8 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory = [];
         clearChat(false);
         document.querySelectorAll('#chat-list .chat-session.active').forEach(li => li.classList.remove('active'));
-        chatTitle.textContent = "New Chat";
-        chatInput.focus();
+        if (chatTitle) chatTitle.textContent = "New Chat";
+        if (chatInput) chatInput.focus();
     }
 
     async function sendMessage() {
@@ -205,7 +205,6 @@ document.addEventListener('DOMContentLoaded', () => {
             chatHistory = [];
         }
 
-        // [2025-12-14] Get selected category
         const selectedCategory = chatCategorySelect ? chatCategorySelect.value : 'Default';
 
         clearTimeout(inactivityTimerId);
@@ -227,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     mode: currentMode,
                     context_filter: selectedFile ? { docs_ids: [selectedFile] } : null,
                     session_id: currentSessionId,
-                    category: selectedCategory // Pass the category
+                    category: selectedCategory 
                 }),
             });
              if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -285,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentSessionId = newSessionIdReceived;
                 await refreshChatList();
                 const newSessionElement = document.querySelector(`.chat-session[data-session-id="${currentSessionId}"]`);
-                if (newSessionElement) {
+                if (newSessionElement && chatTitle) {
                     chatTitle.textContent = newSessionElement.textContent;
                 }
             }
@@ -301,40 +300,85 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- File Management Functions ---
     async function refreshFileList() {
+        if (!fileList) return;
         try {
             const response = await fetch('/api/files');
             if (!response.ok) throw new Error('Failed to fetch files.');
             const files = await response.json();
             fileList.innerHTML = '';
+            
             files.forEach(fileRow => {
+                const fileName = fileRow[0];
                 const li = document.createElement('li');
-                li.textContent = fileRow[0];
-                li.addEventListener('click', () => handleFileSelection(li));
+
+                // 1. Checkbox for batch deletion
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'file-checkbox hidden-by-role';
+                checkbox.value = fileName;
+                checkbox.addEventListener('click', (e) => e.stopPropagation()); 
+
+                // 2. File name container
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'file-item-name';
+                nameSpan.textContent = fileName;
+                nameSpan.title = fileName; 
+
+                // 3. Inline single-delete button
+                const delBtn = document.createElement('button');
+                delBtn.className = 'file-item-delete hidden-by-role';
+                delBtn.title = "Delete this file";
+                delBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>`;
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteSingleFile(fileName);
+                });
+
+                li.appendChild(checkbox);
+                li.appendChild(nameSpan);
+                li.appendChild(delBtn);
+
+                li.addEventListener('click', () => handleFileSelection(li, fileName));
                 fileList.appendChild(li);
             });
+
+            if (selectedFile) {
+                const items = Array.from(fileList.children);
+                const stillExists = items.find(li => li.querySelector('.file-item-name').textContent === selectedFile);
+                if (stillExists) stillExists.classList.add('selected');
+                else deselectFile();
+            }
+
+            fetchUserInfo(); 
         } catch (error) {
             console.error('Error refreshing file list:', error);
             showStatus('Failed to refresh file list', 'error');
         }
     }
 
-    function handleFileSelection(listItem) {
+    function handleFileSelection(listItem, overrideFileName) {
         const current = fileList.querySelector('.selected');
         if (current) current.classList.remove('selected');
         listItem.classList.add('selected');
-        selectedFile = listItem.textContent;
-        selectedFileText.value = listItem.textContent;
-        deselectBtn.disabled = false;
-        deleteSelectedBtn.disabled = false;
+        
+        selectedFile = overrideFileName;
+        
+        if (selectedFileText) {
+            selectedFileText.value = selectedFile;
+        }
+        
+        if (deselectBtn) deselectBtn.disabled = false;
     }
     
     function deselectFile() {
+        if (!fileList) return;
         const current = fileList.querySelector('.selected');
         if (current) current.classList.remove('selected');
         selectedFile = null;
-        selectedFileText.value = "All files";
-        deselectBtn.disabled = true;
-        deleteSelectedBtn.disabled = true;
+        if (selectedFileText) {
+            selectedFileText.value = "All files";
+        }
+        if (deselectBtn) deselectBtn.disabled = true;
     }
 
     async function handleFileUpload(files, teams, tags) {
@@ -352,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('files', files[i]);
         }
         formData.append('teams', JSON.stringify(teams));
-        formData.append('tags', JSON.stringify(tags)); // Append Tags
+        formData.append('tags', JSON.stringify(tags));
     
         try {
             let progress = 0;
@@ -388,63 +432,113 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('File upload error:', error);
         } finally {
             isUploading = false;
-            uploadInput.value = '';
+            if (uploadInput) uploadInput.value = '';
             pendingFilesToUpload = null;
         }
     }
 
-    async function deleteAllFiles() {
-        if (!confirm("Are you sure you want to delete ALL ingested files?")) return;
-        try {
-            showStatus('Deleting all files...', 'loading');
-            const response = await fetch('/api/files', { method: 'DELETE' });
-            if (response.ok) {
-                await refreshFileList();
-                deselectFile();
-                showStatus('All files deleted', 'success');
-            } else { throw new Error('Delete failed'); }
-        } catch (error) {
-            console.error('Error deleting all files:', error);
-            showStatus('Failed to delete files', 'error');
+    async function deleteSingleFile(fileName) {
+        const result = await Swal.fire({
+            title: 'Delete Document?',
+            text: `Are you sure you want to delete "${fileName}"?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: 'hsl(0, 72.2%, 50.6%)',
+            confirmButtonText: 'Yes, delete it!'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                showStatus('Deleting file...', 'loading');
+                const response = await fetch(`/api/files/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+                if (response.ok) {
+                    await refreshFileList();
+                    if(selectedFile === fileName) deselectFile();
+                    Swal.fire('Deleted!', 'Your file has been deleted.', 'success');
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Delete failed');
+                }
+            } catch (error) {
+                Swal.fire('Error', error.message, 'error');
+            }
         }
     }
 
     async function deleteSelected() {
-        if (!selectedFile || !confirm(`Are you sure you want to delete ${selectedFileText.value}?`)) return;
-        try {
-            showStatus('Deleting file...', 'loading');
-            const response = await fetch(`/api/files/${encodeURIComponent(selectedFileText.value)}`, { method: 'DELETE' });
-            if (response.ok) {
+        const checkboxes = document.querySelectorAll('.file-checkbox:checked');
+        if (checkboxes.length === 0) {
+            Swal.fire('No files selected', 'Please check the boxes next to the files you want to delete.', 'info');
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: 'Delete Selected Files?',
+            text: `You are about to delete ${checkboxes.length} file(s). This cannot be undone.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: 'hsl(0, 72.2%, 50.6%)',
+            confirmButtonText: 'Yes, delete them!'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                showStatus('Deleting files...', 'loading');
+                for (let box of checkboxes) {
+                    await fetch(`/api/files/${encodeURIComponent(box.value)}`, { method: 'DELETE' });
+                    if(selectedFile === box.value) deselectFile();
+                }
                 await refreshFileList();
-                deselectFile();
-                showStatus('File deleted', 'success');
-            } else { 
-                const error = await response.json();
-                throw new Error(error.detail || 'Delete failed'); 
+                Swal.fire('Deleted!', 'Selected files have been deleted.', 'success');
+            } catch (error) {
+                Swal.fire('Error', 'Some files could not be deleted.', 'error');
             }
-        } catch (error) {
-            console.error('Error deleting selected file:', error);
-            showStatus(error.message, 'error');
+        }
+    }
+
+    async function deleteAllFiles() {
+        const result = await Swal.fire({
+            title: 'Delete ALL Files?',
+            text: "Are you sure? This will remove all ingested documents!",
+            icon: 'error',
+            showCancelButton: true,
+            confirmButtonColor: 'hsl(0, 72.2%, 50.6%)',
+            confirmButtonText: 'Yes, wipe everything!'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                showStatus('Deleting all files...', 'loading');
+                const response = await fetch('/api/files', { method: 'DELETE' });
+                if (response.ok) {
+                    await refreshFileList();
+                    deselectFile();
+                    Swal.fire('Deleted!', 'All files have been deleted.', 'success');
+                } else { throw new Error('Delete failed'); }
+            } catch (error) {
+                Swal.fire('Error', 'Failed to delete files', 'error');
+            }
         }
     }
 
     // --- UI Enhancement & Role Management ---
     window.toggleAccordion = function(header) {
+        if (!header || !header.nextElementSibling) return;
         header.classList.toggle('collapsed');
         header.nextElementSibling.classList.toggle('collapsed');
     };
 
     async function openUploadModal() {
-        // Fetch data in parallel
         const [teams, tags] = await Promise.all([fetchTeams(), fetchTags()]);
         
         setupSelector(availableTeamsList, selectedTeamsList, teams);
         setupSelector(availableTagsList, selectedTagsList, tags);
         
-        tagModal.classList.remove('hidden');
+        if (tagModal) tagModal.classList.remove('hidden');
     }
 
     function setupDragAndDrop() {
+        if (!uploadZone) return;
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             uploadZone.addEventListener(eventName, e => e.preventDefault());
         });
@@ -458,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         uploadZone.addEventListener('click', async () => { 
-            if (!isUploading) {
+            if (!isUploading && uploadInput) {
                 uploadInput.click();
             }
         });
@@ -467,10 +561,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function manageTheme() {
         const savedTheme = localStorage.getItem('theme') || 'light';
         if (savedTheme === 'dark') document.body.classList.add('dark');
-        themeToggleBtn.addEventListener('click', () => {
-            document.body.classList.toggle('dark');
-            localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
-        });
+        if (themeToggleBtn) {
+            themeToggleBtn.addEventListener('click', () => {
+                document.body.classList.toggle('dark');
+                localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+            });
+        }
     }
 
     async function fetchUserInfo() {
@@ -480,12 +576,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             currentUsername = data.username;
-            profileUsername.textContent = data.display_name || data.username;
-            profileRole.textContent = data.role;
-            profileRole.className = `user-role ${data.role}`;
+            if (profileUsername) profileUsername.textContent = data.display_name || data.username;
+            if (profileRole) {
+                profileRole.textContent = data.role;
+                profileRole.className = `user-role ${data.role}`;
+            }
 
-            profileNameInput.value = data.name || '';
-            profileEmailInput.value = data.email || '';
+            if (profileNameInput) profileNameInput.value = data.name || '';
+            if (profileEmailInput) profileEmailInput.value = data.email || '';
 
             if (data.role === 'admin') {
                 document.querySelectorAll('.hidden-by-role').forEach(el => {
@@ -525,18 +623,22 @@ document.addEventListener('DOMContentLoaded', () => {
     
 	async function loadInitialChat() {
         await refreshChatList();
-        const firstChat = chatList.querySelector('.chat-session');
-        if (firstChat) {
-            switchChatSession(firstChat.dataset.sessionId);
-        } else {
-            startNewChat();
+        if (chatList) {
+            const firstChat = chatList.querySelector('.chat-session');
+            if (firstChat) {
+                switchChatSession(firstChat.dataset.sessionId);
+            } else {
+                startNewChat();
+            }
         }
     }
     
     function clearChat(showStatusMsg = true) {
-        chatbot.innerHTML = '';
-        chatbot.appendChild(welcomeMessage);
-        welcomeMessage.style.display = 'flex';
+        if (chatbot && welcomeMessage) {
+            chatbot.innerHTML = '';
+            chatbot.appendChild(welcomeMessage);
+            welcomeMessage.style.display = 'flex';
+        }
         if (showStatusMsg) { 
             chatHistory = [];
         }
@@ -566,11 +668,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupSelector(availableList, selectedList, items) {
+        if (!availableList || !selectedList) return;
         availableList.innerHTML = '';
         selectedList.innerHTML = '';
         items.forEach(item => {
             const li = document.createElement('li');
-            li.className = 'team-list-item'; // Reuse styling class
+            li.className = 'team-list-item'; 
             li.textContent = item;
             li.dataset.value = item;
             availableList.appendChild(li);
@@ -582,13 +685,11 @@ document.addEventListener('DOMContentLoaded', () => {
         toList.appendChild(element);
     }
 
-    // --- [2025-12-14] Populate Chat Category Dropdown ---
     async function populateChatCategories() {
         if (!chatCategorySelect) return;
         
         try {
             const tags = await fetchTags();
-            // Clear existing options, but keep the default one
             chatCategorySelect.innerHTML = '<option value="Default" selected>Default (Auto-Detect)</option>';
             
             tags.forEach(tag => {
@@ -602,7 +703,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Profile Settings Functions ---
     async function handleUpdateProfile(event) {
         event.preventDefault();
         const name = profileNameInput.value.trim();
@@ -626,8 +726,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.ok) {
                 showStatus(result.message, 'success', profileSettingsStatus);
-                profileNewPasswordInput.value = ''; // Clear password field
-                await fetchUserInfo(); // Refresh display name in header
+                profileNewPasswordInput.value = ''; 
+                await fetchUserInfo(); 
             } else {
                 throw new Error(result.detail || 'Failed to update profile.');
             }
@@ -637,7 +737,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- App Name Function ---
 	async function fetchAndSetBranding() {
         try {
             const response = await fetch('/api/branding');
@@ -651,9 +750,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const favicon = document.getElementById('favicon');
             
             document.title = `${appName} - AI-Powered Document Chat`;
-            document.getElementById('app-header-title').textContent = appName;
-            document.getElementById('welcome-header').textContent = `Welcome to`;
-            document.getElementById('welcome-app-name').textContent = appName;
+            const appHeaderTitle = document.getElementById('app-header-title');
+            if(appHeaderTitle) appHeaderTitle.textContent = appName;
+            
+            const welcomeHeader = document.getElementById('welcome-header');
+            if(welcomeHeader) welcomeHeader.textContent = `Welcome to`;
+            
+            const welcomeAppName = document.getElementById('welcome-app-name');
+            if(welcomeAppName) welcomeAppName.textContent = appName;
             
             if (favicon) {
                 favicon.href = logoUrl;
@@ -681,33 +785,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- Event Listeners ---
-    sendBtn.addEventListener('click', sendMessage);
-    chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
-    chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+    if (chatInput) {
+        chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
+        chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+    }
     
-    uploadInput.addEventListener('change', async e => { 
-        if (e.target.files.length > 0) {
-            pendingFilesToUpload = e.target.files;
-            await openUploadModal();
-        }
-    });
+    if (uploadInput) {
+        uploadInput.addEventListener('change', async e => { 
+            if (e.target.files.length > 0) {
+                pendingFilesToUpload = e.target.files;
+                await openUploadModal();
+            }
+        });
+    }
 
-    deselectBtn.addEventListener('click', deselectFile);
-    deleteAllBtn.addEventListener('click', deleteAllFiles);
-    deleteSelectedBtn.addEventListener('click', deleteSelected);
-    newChatBtn.addEventListener('click', startNewChat);
-    clearBtn.addEventListener('click', () => clearChat(true));
+    if (deselectBtn) deselectBtn.addEventListener('click', deselectFile);
+    if (deleteAllBtn) deleteAllBtn.addEventListener('click', deleteAllFiles);
+    if (deleteSelectedBtn) deleteSelectedBtn.addEventListener('click', deleteSelected);
+    if (newChatBtn) newChatBtn.addEventListener('click', startNewChat);
+    if (clearBtn) clearBtn.addEventListener('click', () => clearChat(true));
     modeRadios.forEach(radio => radio.addEventListener('change', (e) => { currentMode = e.target.value; }));
     
     // Modals and Dropdowns
     if (profileSettingsForm) profileSettingsForm.addEventListener('submit', handleUpdateProfile);
     
-    profileBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        profileDropdown.classList.toggle('show');
-    });
+    if (profileBtn && profileDropdown) {
+        profileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            profileDropdown.classList.toggle('show');
+        });
+    }
 
-    if(profileSettingsLink) {
+    if(profileSettingsLink && profileModal && profileDropdown) {
         profileSettingsLink.addEventListener('click', (e) => {
             e.preventDefault();
             profileModal.classList.remove('hidden');
@@ -718,10 +828,10 @@ document.addEventListener('DOMContentLoaded', () => {
     [profileModalCloseBtn, tagModalCloseBtn, cancelUploadBtn].forEach(btn => {
         if(btn) {
             btn.addEventListener('click', () => {
-                profileModal.classList.add('hidden');
-                tagModal.classList.add('hidden');
+                if (profileModal) profileModal.classList.add('hidden');
+                if (tagModal) tagModal.classList.add('hidden');
                 pendingFilesToUpload = null;
-                uploadInput.value = '';
+                if (uploadInput) uploadInput.value = '';
             });
         }
     });
@@ -733,7 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     modal.classList.add('hidden');
                     if (modal === tagModal) {
                         pendingFilesToUpload = null;
-                        uploadInput.value = '';
+                        if (uploadInput) uploadInput.value = '';
                     }
                 }
             });
@@ -741,18 +851,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     window.addEventListener('click', (e) => {
-        if (!profileDropdown.contains(e.target) && !profileBtn.contains(e.target)) {
+        if (profileDropdown && profileBtn && !profileDropdown.contains(e.target) && !profileBtn.contains(e.target)) {
             profileDropdown.classList.remove('show');
         }
     });
     
-    if (confirmUploadBtn) {
+    if (confirmUploadBtn && selectedTeamsList && selectedTagsList && tagModal) {
         confirmUploadBtn.addEventListener('click', () => {
-            // Gather Selected Teams
             const selectedTeamElements = selectedTeamsList.querySelectorAll('li');
             const selectedTeams = Array.from(selectedTeamElements).map(el => el.dataset.value);
 
-            // Gather Selected Tags
             const selectedTagElements = selectedTagsList.querySelectorAll('li');
             const selectedTags = Array.from(selectedTagElements).map(el => el.dataset.value);
 
@@ -762,27 +870,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (pendingFilesToUpload) {
                 tagModal.classList.add('hidden');
-                // Pass both teams and tags to upload handler
                 handleFileUpload(pendingFilesToUpload, selectedTeams, selectedTags);
             }
         });
     }
 
-    // --- Generic Selector Event Listeners ---
     [
         { available: availableTeamsList, selected: selectedTeamsList },
         { available: availableTagsList, selected: selectedTagsList }
     ].forEach(pair => {
-        pair.available.addEventListener('click', e => {
-            if (e.target.tagName === 'LI') {
-                moveItem(e.target, pair.available, pair.selected);
-            }
-        });
-        pair.selected.addEventListener('click', e => {
-            if (e.target.tagName === 'LI') {
-                moveItem(e.target, pair.selected, pair.available);
-            }
-        });
+        if (pair.available && pair.selected) {
+            pair.available.addEventListener('click', e => {
+                if (e.target.tagName === 'LI') {
+                    moveItem(e.target, pair.available, pair.selected);
+                }
+            });
+            pair.selected.addEventListener('click', e => {
+                if (e.target.tagName === 'LI') {
+                    moveItem(e.target, pair.selected, pair.available);
+                }
+            });
+        }
     });
 
     // --- Initialization ---
@@ -790,12 +898,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     refreshFileList();
     autoResizeTextarea(chatInput);
-    chatInput.focus();
+    if (chatInput) chatInput.focus();
     fetchUserInfo();
     setupSessionTimeout();
     loadInitialChat();
     fetchAndSetBranding();
-    
-    // [2025-12-14] Call to populate chat dropdown
     populateChatCategories();
 });

@@ -45,6 +45,7 @@
         <div class="admin-tabs">
             <button id="user-management-tab" class="admin-tab active">User Management</button>
             <button id="doc-management-tab" class="admin-tab">Document Management</button>
+            <button id="llm-config-tab" class="admin-tab">LLM Config</button>
         </div>
 
         <!-- User Management Content -->
@@ -104,6 +105,46 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+
+        <!-- LLM Config Content -->
+        <div id="llm-config-content" class="tab-pane">
+            <div class="admin-card">
+                <h3>Global LLM Configuration</h3>
+                <p class="form-hint">Set the default AI model for all users. System requires a reboot to apply.</p>
+                <form id="llm-config-form" class="admin-form-container" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="llm-provider">Provider</label>
+                        <select id="llm-provider" class="textbox">
+                            <option value="Ollama">Ollama (Local)</option>
+                            <option value="Gemini">Google Gemini (Cloud)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" id="llm-url-group">
+                        <label for="llm-url">Ollama URL</label>
+                        <input type="text" id="llm-url" class="textbox" placeholder="http://172.18.0.1:11434" value="http://localhost:11434">
+                    </div>
+                    
+                    <div class="form-group" id="llm-token-group" style="display: none;">
+                        <label for="llm-token">API Token</label>
+                        <input type="password" id="llm-token" class="textbox" placeholder="Enter Gemini API Key">
+                    </div>
+
+                    <button id="fetch-models-btn" type="button" class="icon-button" style="background-color: var(--background); border: 1px solid var(--border); color: var(--foreground);">Fetch Available Models</button>
+                    <div id="fetch-models-status" class="upload-status" style="display: none;"></div>
+
+                    <div class="form-group">
+                        <label for="llm-model-select">Select Model</label>
+                        <select id="llm-model-select" class="textbox" disabled>
+                            <option value="">Fetch models first...</option>
+                        </select>
+                    </div>
+
+                    <button type="button" id="save-llm-btn" class="icon-button form-submit-btn" disabled>Save Configuration</button>
+                    <div id="save-llm-status" class="upload-status" style="display: none;"></div>
+                </form>
             </div>
         </div>
     </main>
