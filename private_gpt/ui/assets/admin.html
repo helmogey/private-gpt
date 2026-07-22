@@ -46,6 +46,7 @@
             <button id="user-management-tab" class="admin-tab active">User Management</button>
             <button id="doc-management-tab" class="admin-tab">Document Management</button>
             <button id="llm-config-tab" class="admin-tab">LLM Config</button>
+            <button id="mcp-config-tab" class="admin-tab">MCP Integrations</button>
         </div>
 
         <!-- User Management Content -->
@@ -147,11 +148,72 @@
                 </form>
             </div>
         </div>
+
+        <!-- MCP Config Content -->
+        <div id="mcp-config-content" class="tab-pane" style="grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start;">
+            <div class="admin-card">
+                <h3>Add MCP Integration</h3>
+                <p class="form-hint">Register a new Model Context Protocol server (e.g., Zabbix).</p>
+                <form id="create-mcp-form" class="admin-form-container">
+                    <div class="form-group">
+                        <label for="mcp-name">Name</label>
+                        <input type="text" id="mcp-name" class="textbox" placeholder="e.g., Zabbix" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="mcp-transport">Transport Type</label>
+                        <select id="mcp-transport" class="textbox">
+                            <option value="stdio">Standard I/O (stdio)</option>
+                            <option value="sse">Server-Sent Events (SSE)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="mcp-command">Command / URL</label>
+                        <p class="form-hint" id="mcp-command-hint">Command to run (e.g., npx).</p>
+                        <input type="text" id="mcp-command" class="textbox" placeholder="e.g., npx" required>
+                    </div>
+                    <div class="form-group" id="mcp-args-group">
+                        <label for="mcp-args">Arguments</label>
+                        <p class="form-hint">Comma separated (e.g., -y, @initmax/zabbix-mcp-server).</p>
+                        <input type="text" id="mcp-args" class="textbox" placeholder="arg1, arg2">
+                    </div>
+                    <div class="form-group">
+                        <label>Environment Variables</label>
+                        <p class="form-hint">Dynamic key-value pairs (e.g., ZABBIX_URL).</p>
+                        <div id="mcp-env-vars-container">
+                            <!-- Dynamic env vars will be injected here -->
+                        </div>
+                        <button type="button" id="add-mcp-env-btn" class="icon-button" style="width: 100%; background: var(--background); border: 1px dashed var(--border); color: var(--foreground); margin-top: 0.5rem;">+ Add Env Variable</button>
+                    </div>
+                    <button type="submit" class="icon-button form-submit-btn">Save MCP</button>
+                    <div id="create-mcp-status" class="upload-status" style="display: none;"></div>
+                </form>
+            </div>
+            
+            <div class="admin-card">
+                <h3>Configured MCP Servers</h3>
+                <div class="doc-table-container">
+                    <table class="doc-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Transport</th>
+                                <th>Command/URL</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mcp-list">
+                            <!-- MCP list will be dynamically inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Permissions Modal -->
     <div id="permissions-modal" class="modal-backdrop hidden">
-        <div class="modal-content large"> <!-- Added 'large' for side-by-side config -->
+        <div class="modal-content large">
             <div class="modal-header">
                 <h2>Edit Config for <span id="modal-doc-name" style="font-weight: 700;"></span></h2>
                 <button id="permissions-modal-close-btn" class="theme-toggle">&times;</button>
@@ -250,6 +312,63 @@
             <div class="modal-actions">
                 <button id="cancel-reset-password-btn" class="icon-button">Cancel</button>
                 <button id="save-reset-password-btn" class="icon-button form-submit-btn">Reset Password</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit MCP Modal -->
+    <div id="edit-mcp-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit MCP: <span id="edit-mcp-name-display" style="font-weight: 700;"></span></h2>
+                <button id="edit-mcp-modal-close-btn" class="theme-toggle">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-mcp-form" class="admin-form-container" onsubmit="return false;">
+                    <input type="hidden" id="edit-mcp-id">
+                    <div class="form-group">
+                        <label for="edit-mcp-name">Name</label>
+                        <input type="text" id="edit-mcp-name" class="textbox" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-mcp-transport">Transport Type</label>
+                        <select id="edit-mcp-transport" class="textbox">
+                            <option value="stdio">Standard I/O (stdio)</option>
+                            <option value="sse">Server-Sent Events (SSE)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-mcp-command">Command / URL</label>
+                        <input type="text" id="edit-mcp-command" class="textbox" required>
+                    </div>
+                    <div class="form-group" id="edit-mcp-args-group">
+                        <label for="edit-mcp-args">Arguments</label>
+                        <input type="text" id="edit-mcp-args" class="textbox" placeholder="arg1, arg2">
+                    </div>
+                    <div class="form-group">
+                        <label>Environment Variables</label>
+                        <div id="edit-mcp-env-vars-container"></div>
+                        <button type="button" id="add-edit-mcp-env-btn" class="icon-button" style="width: 100%; background: var(--background); border: 1px dashed var(--border); margin-top: 0.5rem; color: var(--foreground);">+ Add Env Variable</button>
+                    </div>
+                    <div id="edit-mcp-status" class="upload-status" style="display: none;"></div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-edit-mcp-btn" class="icon-button">Cancel</button>
+                <button id="save-edit-mcp-btn" class="icon-button form-submit-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Test MCP Modal -->
+    <div id="test-mcp-modal" class="modal-backdrop hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Test MCP Connection</h2>
+                <button id="test-mcp-modal-close-btn" class="theme-toggle">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="test-mcp-status" style="padding: 1rem; border-radius: var(--radius-md); background: var(--background-muted); font-family: monospace; white-space: pre-wrap; font-size: 0.875rem;">Running test...</div>
             </div>
         </div>
     </div>

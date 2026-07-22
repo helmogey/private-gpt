@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import warnings
 from pathlib import Path
 from typing import List
 from enum import Enum
@@ -13,11 +14,15 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from llama_index.core.llms import ChatMessage, MessageRole
 from pydantic import BaseModel
 import httpx
+
+# Suppress the deprecation warning to keep logs clean
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
 import google.generativeai as genai
-from private_gpt.database import get_llm_config, save_llm_config
 
 from private_gpt.open_ai.extensions.context_filter import ContextFilter
 from private_gpt.database import (
+    get_llm_config, 
+    save_llm_config,
     save_chat_message, 
     get_all_chat_sessions, 
     get_chat_history_by_session,
@@ -30,9 +35,13 @@ from private_gpt.database import (
     add_document_teams,
     get_document_teams,
     admin_update_user,
-    add_document_tags,      # [2025-12-03] New Import
-    get_document_tags,      # [2025-12-03] New Import
-    get_docs_by_tag         # [2025-12-03] New Import
+    add_document_tags,      
+    get_document_tags,      
+    get_docs_by_tag,
+    create_mcp_config,      
+    get_all_mcp_configs,    
+    delete_mcp_config,
+    update_mcp_config       
 )
 from private_gpt.di import global_injector
 from private_gpt.server.chat.chat_service import ChatService
@@ -45,13 +54,6 @@ SESSION_MAX_AGE = 600
 
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
-
-# @api_router.get("/app-name")
-# def get_app_name():
-#     """Provides the application name from environment variables."""
-#     app_name = os.getenv("APP_NAME", "DocuMind")
-#     return JSONResponse(content={"appName": app_name})
-
 
 @api_router.get("/branding")
 def get_branding_info():
@@ -182,7 +184,7 @@ class AdminResetPasswordBody(BaseModel):
 class DocumentPermissionBody(BaseModel):
     file_name: str
     teams: List[str]
-    tags: List[str] = [] # [2025-12-03] New Field for admin update
+    tags: List[str] = []
 
 class LLMModelsRequest(BaseModel):
     provider: str
@@ -194,6 +196,13 @@ class LLMConfigRequest(BaseModel):
     url: str | None = None
     token: str | None = None
     model: str
+
+class MCPConfigBody(BaseModel):
+    name: str
+    transport_type: str
+    command: str
+    args: List[str] = []
+    env_vars: dict = {}
 
 # --- UI Session & User Info Endpoints ---
 
@@ -264,6 +273,8 @@ async def chat(
     chunks_service: ChunksService = Depends(get_chunks_service),
     ingest_service: IngestService = Depends(get_ingest_service)
 ):
+    from private_gpt.launcher import mcp_manager # Fetch global MCP manager
+    
     user_id = request.session.get("user_id")
     user_role = request.session.get("user_role")
     user_teams = request.session.get("user_teams", [])
@@ -271,10 +282,10 @@ async def chat(
     messages = [ChatMessage(role=MessageRole(m['role']), content=m['content']) for m in chat_body.messages]
     last_message = messages[-1] if messages else ChatMessage(role=MessageRole.USER, content="")
 
-    # [2025-12-14] Determine Category Logic
-    # If user selected a category manually (not Default), use it.
-    # Otherwise, use the LLM to identify the category.
     user_selected_category = chat_body.category
+    
+    # Define categories that have MCP tools attached
+    tool_categories = ["ZABBIX"]
     
     if user_selected_category and user_selected_category.upper() != "DEFAULT":
         query_category = user_selected_category.upper()
@@ -283,7 +294,32 @@ async def chat(
         query_category = identify_query_category(chat_service, last_message.content)
         logger.info(f"Incoming Query: '{last_message.content}' | Identified Category (Auto): {query_category}")
 
-    # Save the original user message to the database before modifying it
+    # --- NEW: Retrieve and filter active MCP Tools for this category ---
+    active_mcp_tools = []
+    all_mcp_tools = mcp_manager.get_all_tools()
+    
+    system_prompt_override = None
+
+    if query_category == "ZABBIX":
+        # Broaden the filter to capture initMAX tools like host_get, problem_get, etc., 
+        # regardless of what the MCP connection is named in the DB.
+        active_mcp_tools = [
+            tool for tool in all_mcp_tools 
+            if any(keyword in tool.metadata.name.lower() or keyword in tool.metadata.description.lower() 
+                   for keyword in ["zabbix", "host", "problem", "trigger", "event"])
+        ]
+        
+        if active_mcp_tools:
+            system_prompt_override = (
+                "You are an expert Zabbix administrator monitoring infrastructure.\n"
+                "CRITICAL INSTRUCTIONS:\n"
+                "1. You have access to specific Zabbix tools (e.g., host_get, problem_get, trigger_get).\n"
+                "2. YOU MUST USE these tools to fetch live data to answer the user's question.\n"
+                "3. Do not guess, use RAG, or make up data. Always call the relevant tool first.\n"
+                "4. If a tool returns an error, stop and report the error to the user."
+            )
+    # -------------------------------------------------------------------
+
     session_id = chat_body.session_id
     is_new_chat = not session_id
     if is_new_chat:
@@ -292,12 +328,9 @@ async def chat(
     if user_id:
         save_chat_message(user_id, session_id, 'user', last_message.content, is_new_chat)
 
-    # Conditionally add date context
     time_keywords = [
         "today", "yesterday", "tomorrow", "week", "month", "year", "now",
-        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-        "january", "february", "march", "april", "may", "june", "july",
-        "august", "september", "october", "november", "december"
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
     ]
     
     if any(keyword in last_message.content.lower() for keyword in time_keywords):
@@ -317,7 +350,7 @@ async def chat(
 
         n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
         relevant_chunks = chunks_service.retrieve_relevant(
-            text=last_message.content, # Use original message for search
+            text=last_message.content, 
             limit=n_chunks, 
             prev_next_chunks=0,
             context_filter=context_filter
@@ -349,30 +382,18 @@ async def chat(
 
         return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
 
-    # RAG Mode for all users (including Admins not in Search Mode)
     final_context_filter = None
 
     if user_role != 'admin':
         all_docs = ingest_service.list_ingested()
-        
-        # 1. Filter by Team Permissions first
-        allowed_docs = [
-            doc for doc in all_docs 
-            if any(team in get_document_teams(doc.doc_id) for team in user_teams)
-        ]
+        allowed_docs = [doc for doc in all_docs if any(team in get_document_teams(doc.doc_id) for team in user_teams)]
 
-        # 2. [2025-12-03] Filter by Category Tag STRICTLY
-        # Even 'GENERAL' must match 'GENERAL' tag.
         tagged_doc_ids = get_docs_by_tag(query_category)
-        
-        # Intersection: Must be allowed AND have the tag
         allowed_docs = [doc for doc in allowed_docs if doc.doc_id in tagged_doc_ids]
         allowed_doc_ids = [doc.doc_id for doc in allowed_docs]
 
-        if not allowed_doc_ids:
-            # Check if it was empty because of strict filtering
-            msg = f"No documents found for category '{query_category}' that you have access to."
-                
+        if not allowed_doc_ids and not active_mcp_tools:
+            msg = f"No documents or tools found for category '{query_category}' that you have access to."
             async def empty_stream():
                 yield f"data: {json.dumps({'delta': msg})}\n\n"
             return StreamingResponse(empty_stream(), media_type="text/event-stream")
@@ -386,51 +407,49 @@ async def chat(
                     yield f"data: {json.dumps({'delta': 'Access denied to the selected document.'})}\n\n"
                 return StreamingResponse(denied_stream(), media_type="text/event-stream")
         else:
-            final_context_filter = ContextFilter(docs_ids=allowed_doc_ids)
+            final_context_filter = ContextFilter(docs_ids=allowed_doc_ids) if allowed_doc_ids else None
     
     elif chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
-        # Admin with a specific file selected
         docs = ingest_service.list_ingested()
         selected_filename = chat_body.context_filter.get("docs_ids")[0]
-        
-        doc_ids_for_file = [
-            doc.doc_id for doc in docs if doc.doc_metadata and doc.doc_metadata.get("file_name") == selected_filename
-        ]
+        doc_ids_for_file = [doc.doc_id for doc in docs if doc.doc_metadata and doc.doc_metadata.get("file_name") == selected_filename]
         
         if doc_ids_for_file:
             final_context_filter = ContextFilter(docs_ids=doc_ids_for_file)
         else:
             final_context_filter = None
             
-    # [2025-12-03] Admin filtering by Category (Global RAG)
-    # If admin hasn't selected a specific file, apply the category filter strictly for Admin too.
     elif user_role == 'admin' and final_context_filter is None:
          tagged_doc_ids = get_docs_by_tag(query_category)
-         
          if tagged_doc_ids:
              final_context_filter = ContextFilter(docs_ids=tagged_doc_ids)
-         else:
-             # Strict filtering: If no docs match the category, Admin gets no results.
-             msg = f"No documents found for category '{query_category}'."
+         elif not active_mcp_tools:
+             msg = f"No documents or tools found for category '{query_category}'."
              async def empty_stream_admin():
                 yield f"data: {json.dumps({'delta': msg})}\n\n"
              return StreamingResponse(empty_stream_admin(), media_type="text/event-stream")
 
     try:
-        completion_gen = chat_service.stream_chat(
+        # UPDATED TO AWAIT THE ASYNC NATIVE METHOD
+        completion_gen = await chat_service.astream_chat(
             messages=messages,
             use_context=True,
             context_filter=final_context_filter,
+            tools=active_mcp_tools,
+            system_prompt_override=system_prompt_override
         )
 
         async def stream_generator():
             full_response = ""
             if is_new_chat:
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-            for delta in completion_gen.response:
-                text_delta = delta if isinstance(delta, str) else delta.delta
+            
+            # Use async for directly over the newly formatted stream
+            async for delta in completion_gen.async_response_gen():
+                text_delta = delta if isinstance(delta, str) else getattr(delta, "delta", str(delta))
                 full_response += text_delta
                 yield f"data: {json.dumps({'delta': text_delta})}\n\n"
+                
             if user_id:
                 save_chat_message(user_id, session_id, 'assistant', full_response, False)
             if completion_gen.sources:
@@ -447,11 +466,14 @@ async def chat(
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
         
     except Exception as e:
-        logger.error(f"Error during Chat/RAG execution: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        logger.error(f"Error during Chat/RAG/MCP execution:\n{tb}")
+        
         error_message = (
-            f"**System Error**: The vector index seems corrupted or missing.\n\n"
+            f"**System Error**: The execution failed.\n\n"
             f"Details: {str(e)}\n\n"
-            "**Fix**: Please go to the 'Files' section and re-upload/ingest your documents to rebuild the index."
+            "**Fix**: Please check your API keys, backend connection, or tool configuration."
         )
         
         async def error_stream():
@@ -465,7 +487,7 @@ async def chat(
 async def upload_files(
     files: List[UploadFile] = File(...), 
     teams: str = Form(...),
-    tags: str = Form(default="[]"), # [2025-12-03] Accept tags as JSON string
+    tags: str = Form(default="[]"), 
     ingest_service: IngestService = Depends(get_ingest_service)
 ):
     temp_paths = []
@@ -483,7 +505,6 @@ async def upload_files(
             ingested_docs_info.append((str(file.filename), temp_path))
 
         if ingested_docs_info:
-            # [2025-12-03] Added specific error handling for ingestion failures (e.g. Model Context Window Exceeded)
             try:
                 ingested_docs = ingest_service.bulk_ingest(ingested_docs_info)
             except Exception as e:
@@ -494,12 +515,12 @@ async def upload_files(
                 raise HTTPException(status_code=500, detail=msg)
 
             team_list = json.loads(teams)
-            tag_list = json.loads(tags) # [2025-12-03] Parse tags
+            tag_list = json.loads(tags)
             
             for doc in ingested_docs:
                 add_document_teams(doc.doc_id, team_list)
                 if tag_list:
-                    add_document_tags(doc.doc_id, tag_list) # [2025-12-03] Add tags
+                    add_document_tags(doc.doc_id, tag_list) 
             
     finally:
         for path in temp_paths:
@@ -575,7 +596,7 @@ async def get_all_documents_with_permissions(ingest_service: IngestService = Dep
                 docs_by_filename[filename] = {
                     "file_name": filename,
                     "teams": get_document_teams(doc.doc_id),
-                    "tags": get_document_tags(doc.doc_id) # [2025-12-03] Return tags
+                    "tags": get_document_tags(doc.doc_id) 
                 }
     return JSONResponse(content=list(docs_by_filename.values()))
 
@@ -595,7 +616,7 @@ async def update_document_permissions(
 
     for doc_id in doc_ids_to_update:
         add_document_teams(doc_id, body.teams)
-        if body.tags: # [2025-12-03] Update tags if provided
+        if body.tags:
              add_document_tags(doc_id, body.tags)
 
     return JSONResponse(content={"message": "Permissions updated successfully."})
@@ -636,7 +657,6 @@ async def handle_create_user(body: CreateUserBody):
 async def handle_edit_user(body: AdminUpdateUserBody, request: Request):
     """Updates a user's role and teams. Admin only."""
     
-    # Validation
     if body.new_role not in ['admin', 'user']:
         raise HTTPException(status_code=400, detail="Invalid role. Must be 'admin' or 'user'.")
 
@@ -650,7 +670,6 @@ async def handle_edit_user(body: AdminUpdateUserBody, request: Request):
         if team not in teams_list:
             raise HTTPException(status_code=400, detail=f"Invalid team '{team}'. Must be one of {teams_list}")
 
-    # Prevent admin from editing their own role or team
     logged_in_user = request.session.get("username")
     if body.username == logged_in_user:
         raise HTTPException(status_code=400, detail="Admins cannot edit their own role or teams.")
@@ -698,8 +717,6 @@ async def handle_delete_user(username: str, request: Request):
         logger.error(f"Error deleting user '{username}': {e}")
         raise HTTPException(status_code=500, detail="Internal server error while deleting user.")
 
-
-
 @api_router.get("/admin/llm/config", dependencies=[Depends(require_admin)])
 async def fetch_current_llm_config():
     config = get_llm_config()
@@ -734,3 +751,92 @@ async def fetch_llm_models(body: LLMModelsRequest):
 async def save_llm_cfg(body: LLMConfigRequest):
     save_llm_config(body.provider, body.url, body.token, body.model)
     return JSONResponse(content={"message": "LLM Configuration saved! Please restart PrivateGPT to apply changes globally."})
+
+# --- MCP Admin Endpoints ---
+
+@api_router.get("/admin/mcp", dependencies=[Depends(require_admin)])
+async def fetch_mcp_configs():
+    configs = get_all_mcp_configs()
+    return JSONResponse(content=configs)
+
+@api_router.post("/admin/mcp", dependencies=[Depends(require_admin)])
+async def handle_create_mcp(body: MCPConfigBody):
+    try:
+        create_mcp_config(
+            name=body.name,
+            transport_type=body.transport_type,
+            command=body.command,
+            args=body.args,
+            env_vars=body.env_vars
+        )
+        return JSONResponse(content={"message": f"MCP '{body.name}' created successfully."}, status_code=201)
+    except Exception as e:
+        logger.error(f"Error creating MCP config: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while saving MCP configuration.")
+
+@api_router.put("/admin/mcp/{mcp_id}", dependencies=[Depends(require_admin)])
+async def handle_update_mcp(mcp_id: int, body: MCPConfigBody):
+    try:
+        update_mcp_config(
+            mcp_id=mcp_id,
+            name=body.name,
+            transport_type=body.transport_type,
+            command=body.command,
+            args=body.args,
+            env_vars=body.env_vars
+        )
+        return JSONResponse(content={"message": f"MCP '{body.name}' updated successfully."}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error updating MCP config {mcp_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while updating MCP configuration.")
+
+@api_router.post("/admin/mcp/test", dependencies=[Depends(require_admin)])
+async def handle_test_mcp(body: MCPConfigBody):
+    from mcp.client.stdio import stdio_client, StdioServerParameters
+    from mcp.client.sse import sse_client
+    from mcp.client.session import ClientSession
+    from contextlib import AsyncExitStack
+    import os
+    import asyncio
+
+    try:
+        # 10 SECOND TIMEOUT
+        async with asyncio.timeout(10.0):
+            async with AsyncExitStack() as stack:
+                if body.transport_type == "stdio":
+                    env = os.environ.copy()
+                    if body.env_vars:
+                        env.update(body.env_vars)
+                    server_params = StdioServerParameters(command=body.command, args=body.args, env=env)
+                    read, write = await stack.enter_async_context(stdio_client(server_params))
+                elif body.transport_type == "sse":
+                    read, write = await stack.enter_async_context(sse_client(url=body.command, headers=body.env_vars))
+                else:
+                    return JSONResponse(content={"error": "Invalid transport type"}, status_code=400)
+                
+                session = await stack.enter_async_context(ClientSession(read, write))
+                await session.initialize()
+                mcp_tools = await session.list_tools()
+                
+                tools = [{"name": t.name, "description": t.description} for t in mcp_tools.tools]
+                return JSONResponse(content={"message": f"Successfully connected! Found {len(tools)} tools.", "tools": tools})
+                
+    except asyncio.TimeoutError:
+        return JSONResponse(content={"error": "Connection timed out. Ensure the command/URL is correct."}, status_code=400)
+    except Exception as e:
+        error_msg = str(e)
+        if hasattr(e, 'exceptions'):
+            sub_errors = [str(sub_e) for sub_e in e.exceptions]
+            error_msg = " | ".join(sub_errors)
+            
+        logger.error(f"MCP Test Failed: {error_msg}")
+        return JSONResponse(content={"error": f"Connection failed: {error_msg}"}, status_code=400)
+
+@api_router.delete("/admin/mcp/{mcp_id}", dependencies=[Depends(require_admin)])
+async def handle_delete_mcp(mcp_id: int):
+    try:
+        delete_mcp_config(mcp_id)
+        return JSONResponse(content={"message": f"MCP integration deleted successfully."}, status_code=200)
+    except Exception as e:
+        logger.error(f"Error deleting MCP config {mcp_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while deleting MCP configuration.")

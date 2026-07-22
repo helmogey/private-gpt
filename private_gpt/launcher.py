@@ -1,3 +1,5 @@
+"""FastAPI app creation, logger configuration and main API routes."""
+
 import logging
 import os
 from injector import Injector
@@ -10,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 
 from private_gpt.constants import PROJECT_ROOT_PATH
 from private_gpt.server.chat.chat_router import chat_router
@@ -21,8 +24,12 @@ from private_gpt.server.ingest.ingest_router import ingest_router
 from private_gpt.settings.settings import Settings
 from private_gpt.database import init_db, get_user, verify_password, get_llm_config
 from private_gpt.ui.api import api_router
+from private_gpt.server.mcp.mcp_manager import MCPManager
 
 logger = logging.getLogger(__name__)
+
+# --- Global MCP Manager Instance ---
+mcp_manager = MCPManager()
 
 # --- FIX: Unified Assets Path ---
 # Based on user input: "all login.html and other html... are inside assets inside ui inside priv-gpt"
@@ -79,10 +86,20 @@ def create_app(root_injector: Injector) -> FastAPI:
             os.environ["GOOGLE_API_KEY"] = config.get("llm_token", "")
             os.environ["GEMINI_MODEL"] = config.get("llm_model", "")
 
+    # --- NEW: Application Lifespan for MCP Server Management ---
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        logger.info("Starting up MCP Manager...")
+        await mcp_manager.startup()
+        yield
+        logger.info("Shutting down MCP Manager...")
+        await mcp_manager.shutdown()
+
     async def bind_injector_to_request(request: Request) -> None:
         request.state.injector = root_injector
 
-    app = FastAPI(dependencies=[Depends(bind_injector_to_request)])
+    # Attach lifespan to FastAPI
+    app = FastAPI(dependencies=[Depends(bind_injector_to_request)], lifespan=lifespan)
     
     app.add_middleware(AuthenticationMiddleware)
     app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET_KEY", "a_very_secret_key"), max_age=SESSION_MAX_AGE)
@@ -98,7 +115,7 @@ def create_app(root_injector: Injector) -> FastAPI:
     async def get_login_page(request: Request):
         app_name = os.getenv("APP_NAME", "DocuMind")
         app_logo_url = os.getenv("APP_LOGO_URL_Black", "/assets/NEC-Logo.svg") 
-        return templates.TemplateResponse("login.html", {"request": request, "app_name": app_name, "app_logo_url": app_logo_url})
+        return templates.TemplateResponse(name="login.html", request=request, context={"app_name": app_name, "app_logo_url": app_logo_url})
         
     @app.post("/login", tags=["UI"])
     async def handle_login_form(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -117,9 +134,9 @@ def create_app(root_injector: Injector) -> FastAPI:
             app_logo_url = os.getenv("APP_LOGO_URL_Black", "/assets/NEC-Logo.svg")
 
         return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request, 
+            name="login.html",
+            request=request,
+            context={
                 "error": "Invalid username or password", 
                 "app_name": app_name,
                 "app_logo_url": app_logo_url

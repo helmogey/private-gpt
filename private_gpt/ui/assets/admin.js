@@ -9,10 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tab elements
     const userManagementTab = document.getElementById('user-management-tab');
     const docManagementTab = document.getElementById('doc-management-tab');
-    const llmConfigTab = document.getElementById('llm-config-tab'); // Added
+    const llmConfigTab = document.getElementById('llm-config-tab');
+    const mcpConfigTab = document.getElementById('mcp-config-tab'); // Added
     const userManagementContent = document.getElementById('user-management-content');
     const docManagementContent = document.getElementById('doc-management-content');
-    const llmConfigContent = document.getElementById('llm-config-content'); // Added
+    const llmConfigContent = document.getElementById('llm-config-content');
+    const mcpConfigContent = document.getElementById('mcp-config-content'); // Added
 
     // User Management elements
     const createUserForm = document.getElementById('create-user-form');
@@ -52,14 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const availableTeamsList = document.getElementById('available-teams-list-modal');
     const assignedTeamsList = document.getElementById('assigned-teams-list-modal');
     
-    // [2025-12-03] Tag Lists
+    // Tag Lists
     const availableTagsList = document.getElementById('available-tags-list-modal');
     const assignedTagsList = document.getElementById('assigned-tags-list-modal');
 
     const cancelPermissionsBtn = document.getElementById('cancel-permissions-btn');
     const savePermissionsBtn = document.getElementById('save-permissions-btn');
 
-    // --- LLM Config Elements (Added) ---
+    // --- LLM Config Elements ---
     const llmProviderSelect = document.getElementById('llm-provider');
     const llmUrlGroup = document.getElementById('llm-url-group');
     const llmTokenGroup = document.getElementById('llm-token-group');
@@ -71,10 +73,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const fetchModelsStatus = document.getElementById('fetch-models-status');
     const saveLlmStatus = document.getElementById('save-llm-status');
 
+    // --- MCP Config Elements (Added) ---
+    const createMcpForm = document.getElementById('create-mcp-form');
+    const mcpNameInput = document.getElementById('mcp-name');
+    const mcpTransportSelect = document.getElementById('mcp-transport');
+    const mcpCommandInput = document.getElementById('mcp-command');
+    const mcpCommandHint = document.getElementById('mcp-command-hint');
+    const mcpArgsInput = document.getElementById('mcp-args');
+    const mcpArgsGroup = document.getElementById('mcp-args-group');
+    const mcpEnvVarsContainer = document.getElementById('mcp-env-vars-container');
+    const addMcpEnvBtn = document.getElementById('add-mcp-env-btn');
+    const createMcpStatus = document.getElementById('create-mcp-status');
+    const mcpList = document.getElementById('mcp-list');
+
+    // --- Edit MCP Elements ---
+    const editMcpModal = document.getElementById('edit-mcp-modal');
+    const editMcpModalCloseBtn = document.getElementById('edit-mcp-modal-close-btn');
+    const cancelEditMcpBtn = document.getElementById('cancel-edit-mcp-btn');
+    const saveEditMcpBtn = document.getElementById('save-edit-mcp-btn');
+    const editMcpId = document.getElementById('edit-mcp-id');
+    const editMcpName = document.getElementById('edit-mcp-name');
+    const editMcpNameDisplay = document.getElementById('edit-mcp-name-display');
+    const editMcpTransport = document.getElementById('edit-mcp-transport');
+    const editMcpCommand = document.getElementById('edit-mcp-command');
+    const editMcpArgs = document.getElementById('edit-mcp-args');
+    const editMcpArgsGroup = document.getElementById('edit-mcp-args-group');
+    const editMcpEnvVarsContainer = document.getElementById('edit-mcp-env-vars-container');
+    const addEditMcpEnvBtn = document.getElementById('add-edit-mcp-env-btn');
+    const editMcpStatus = document.getElementById('edit-mcp-status');
+
+    // --- Test MCP Elements ---
+    const testMcpModal = document.getElementById('test-mcp-modal');
+    const testMcpModalCloseBtn = document.getElementById('test-mcp-modal-close-btn');
+    const testMcpStatus = document.getElementById('test-mcp-status');
+
+    let allMcps = []; // Store to easily fetch for editing
+
     // --- State Variables ---
     let currentUsername = null;
     let allTeams = [];
-    let allTags = []; // [2025-12-03]
+    let allTags = []; 
     let currentEditingDoc = null;
     let currentEditingUser = null; 
 
@@ -96,10 +134,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'An unknown error occurred.';
     }
 
-    // --- Tab Navigation (Updated for multiple tabs) ---
+    // --- Tab Navigation ---
     function setupTabs() {
-        const tabs = [userManagementTab, docManagementTab, llmConfigTab];
-        const panes = [userManagementContent, docManagementContent, llmConfigContent];
+        const tabs = [userManagementTab, docManagementTab, llmConfigTab, mcpConfigTab];
+        const panes = [userManagementContent, docManagementContent, llmConfigContent, mcpConfigContent];
 
         tabs.forEach((tab, index) => {
             if (!tab) return;
@@ -108,10 +146,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 panes.forEach(p => p?.classList.remove('active'));
                 
                 tab.classList.add('active');
-                if (panes[index]) panes[index].classList.add('active');
+                if (panes[index]) {
+                    panes[index].classList.add('active');
+                    // Special grid handling for panes that need it
+                    if (tab.id === 'user-management-tab' || tab.id === 'mcp-config-tab') {
+                        panes[index].style.display = 'grid';
+                    }
+                }
 
-                // Load existing config when LLM tab is opened
                 if (tab.id === 'llm-config-tab') loadCurrentLLMConfig();
+                if (tab.id === 'mcp-config-tab') fetchMCPConfigs();
             });
         });
     }
@@ -166,9 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentEditingDoc = docName;
         modalDocName.textContent = docName;
     
-        // Find the document data from the table (simple approach) or fetch again.
-        // We'll scrape the current state from the table DOM for simplicity in this context,
-        // but ideally we should store 'documents' in a state variable.
+        // Find the document data from the table
         const docRow = Array.from(docList.querySelectorAll('tr')).find(row => row.cells[0].textContent === docName);
         
         // 1. Teams
@@ -264,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // [2025-12-03] Fetch Tags
+    // Fetch Tags
     async function fetchAndStoreTags() {
         try {
             const response = await fetch('/api/tags');
@@ -497,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- LLM Config Logic (Added) ---
+    // --- LLM Config Logic ---
     if (llmProviderSelect) {
         llmProviderSelect.addEventListener('change', (e) => {
             if (e.target.value === 'Ollama') {
@@ -588,6 +630,274 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- MCP Config Logic ---
+    function createEnvVarRow(key = '', value = '', container) {
+        if (!container) container = mcpEnvVarsContainer;
+        const row = document.createElement('div');
+        row.className = 'env-var-row';
+        row.style.display = 'flex';
+        row.style.gap = '0.5rem';
+        row.style.marginBottom = '0.5rem';
+
+        row.innerHTML = `
+            <input type="text" class="textbox env-key" placeholder="Key (e.g., ZABBIX_URL)" value="${key}" style="flex: 1;">
+            <input type="text" class="textbox env-value" placeholder="Value" value="${value}" style="flex: 2;">
+            <button type="button" class="icon-button remove-env-btn" style="background: transparent; color: var(--foreground-muted); border: 1px solid var(--border);">&#10005;</button>
+        `;
+
+        row.querySelector('.remove-env-btn').addEventListener('click', () => {
+            row.remove();
+        });
+
+        container.appendChild(row);
+    }
+
+    if (addMcpEnvBtn) {
+        addMcpEnvBtn.addEventListener('click', () => createEnvVarRow('', '', mcpEnvVarsContainer));
+    }
+    if (addEditMcpEnvBtn) {
+        addEditMcpEnvBtn.addEventListener('click', () => createEnvVarRow('', '', editMcpEnvVarsContainer));
+    }
+
+    function toggleArgsGroup(transportSelect, argsGroup) {
+        if (transportSelect.value === 'sse') {
+            argsGroup.style.display = 'none';
+        } else {
+            argsGroup.style.display = 'block';
+        }
+    }
+
+    if (mcpTransportSelect) {
+        mcpTransportSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'sse') {
+                mcpCommandHint.textContent = 'Enter the SSE URL (e.g., http://localhost:8080/sse).';
+                mcpCommandInput.placeholder = 'http://...';
+            } else {
+                mcpCommandHint.textContent = 'Command to run (e.g., npx).';
+                mcpCommandInput.placeholder = 'e.g., npx';
+            }
+            toggleArgsGroup(mcpTransportSelect, mcpArgsGroup);
+        });
+    }
+
+    if (editMcpTransport) {
+        editMcpTransport.addEventListener('change', () => toggleArgsGroup(editMcpTransport, editMcpArgsGroup));
+    }
+
+    async function fetchMCPConfigs() {
+        if (!mcpList) return;
+        try {
+            const response = await fetch('/api/admin/mcp');
+            if (!response.ok) throw new Error('Failed to fetch MCP configurations');
+            allMcps = await response.json();
+            renderMCPList(allMcps);
+        } catch (error) {
+            console.error('Error fetching MCPs:', error);
+            mcpList.innerHTML = '<tr><td colspan="4">Could not load MCP configurations.</td></tr>';
+        }
+    }
+
+    function renderMCPList(mcps) {
+        mcpList.innerHTML = '';
+        if (mcps.length === 0) {
+            mcpList.innerHTML = '<tr><td colspan="4">No MCP servers configured yet.</td></tr>';
+            return;
+        }
+        mcps.forEach(mcp => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${mcp.name}</strong></td>
+                <td><span class="team-badge tag-badge">${mcp.transport_type}</span></td>
+                <td>${mcp.command}</td>
+                <td>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <button class="test-mcp-btn icon-button" data-mcp-id="${mcp.id}" title="Test Connection" style="padding: 0.25rem 0.5rem; background: var(--background); color: var(--foreground-muted); border: 1px solid var(--border);">Test</button>
+                        <button class="edit-mcp-btn" data-mcp-id="${mcp.id}" title="Edit MCP" style="background: transparent; border: none; cursor: pointer; color: var(--foreground-muted);">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20.71 7.04c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.37-.39-1.02-.39-1.41 0l-1.84 1.83l3.75 3.75l1.84-1.83M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Z"/></svg>
+                        </button>
+                        <button class="delete-user-btn delete-mcp-btn" data-mcp-id="${mcp.id}" title="Delete MCP">
+                            <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                        </button>
+                    </div>
+                </td>
+            `;
+            mcpList.appendChild(tr);
+        });
+    }
+
+    if (createMcpForm) {
+        createMcpForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const payload = {
+                name: mcpNameInput.value.trim(),
+                transport_type: mcpTransportSelect.value,
+                command: mcpCommandInput.value.trim(),
+                args: mcpArgsInput.value.trim() ? mcpArgsInput.value.trim().split(',').map(a => a.trim()) : [],
+                env_vars: {}
+            };
+
+            mcpEnvVarsContainer.querySelectorAll('.env-var-row').forEach(row => {
+                const key = row.querySelector('.env-key').value.trim();
+                const val = row.querySelector('.env-value').value.trim();
+                if (key) payload.env_vars[key] = val;
+            });
+
+            if (!payload.name || !payload.command) {
+                showStatus('Name and Command/URL are required.', 'error', createMcpStatus);
+                return;
+            }
+
+            try {
+                showStatus('Saving MCP config...', 'loading', createMcpStatus);
+                const response = await fetch('/api/admin/mcp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    showStatus('MCP configuration saved successfully.', 'success', createMcpStatus);
+                    createMcpForm.reset();
+                    mcpEnvVarsContainer.innerHTML = ''; 
+                    await fetchMCPConfigs();
+                } else {
+                    throw new Error(result.detail || 'Failed to save.');
+                }
+            } catch (error) {
+                showStatus(error.message, 'error', createMcpStatus);
+            }
+        });
+    }
+
+    if (mcpList) {
+        mcpList.addEventListener('click', async (event) => {
+            // DELETE
+            const deleteBtn = event.target.closest('.delete-mcp-btn');
+            if (deleteBtn) {
+                const mcpId = deleteBtn.dataset.mcpId;
+                if (!confirm(`Are you sure you want to delete this MCP configuration?`)) return;
+                try {
+                    const response = await fetch(`/api/admin/mcp/${mcpId}`, { method: 'DELETE' });
+                    if (response.ok) await fetchMCPConfigs();
+                    else alert('Failed to delete MCP');
+                } catch (error) {
+                    alert('Error deleting MCP.');
+                }
+            }
+
+            // EDIT
+            const editBtn = event.target.closest('.edit-mcp-btn');
+            if (editBtn) {
+                const mcpId = parseInt(editBtn.dataset.mcpId);
+                const mcp = allMcps.find(m => m.id === mcpId);
+                if (mcp) {
+                    editMcpId.value = mcp.id;
+                    editMcpName.value = mcp.name;
+                    editMcpNameDisplay.textContent = mcp.name;
+                    editMcpTransport.value = mcp.transport_type;
+                    editMcpCommand.value = mcp.command;
+                    editMcpArgs.value = mcp.args ? mcp.args.join(', ') : '';
+                    
+                    editMcpEnvVarsContainer.innerHTML = '';
+                    if (mcp.env_vars) {
+                        for (const [key, val] of Object.entries(mcp.env_vars)) {
+                            createEnvVarRow(key, val, editMcpEnvVarsContainer);
+                        }
+                    }
+                    toggleArgsGroup(editMcpTransport, editMcpArgsGroup);
+                    editMcpModal.classList.remove('hidden');
+                }
+            }
+
+            // TEST
+            const testBtn = event.target.closest('.test-mcp-btn');
+            if (testBtn) {
+                const mcpId = parseInt(testBtn.dataset.mcpId);
+                const mcp = allMcps.find(m => m.id === mcpId);
+                if (mcp) {
+                    runTestConnection(mcp);
+                }
+            }
+        });
+    }
+
+    if (saveEditMcpBtn) {
+        saveEditMcpBtn.addEventListener('click', async () => {
+            const mcpId = editMcpId.value;
+            const payload = {
+                name: editMcpName.value.trim(),
+                transport_type: editMcpTransport.value,
+                command: editMcpCommand.value.trim(),
+                args: editMcpArgs.value.trim() ? editMcpArgs.value.trim().split(',').map(a => a.trim()) : [],
+                env_vars: {}
+            };
+
+            editMcpEnvVarsContainer.querySelectorAll('.env-var-row').forEach(row => {
+                const key = row.querySelector('.env-key').value.trim();
+                const val = row.querySelector('.env-value').value.trim();
+                if (key) payload.env_vars[key] = val;
+            });
+
+            try {
+                showStatus('Updating...', 'loading', editMcpStatus);
+                const response = await fetch(`/api/admin/mcp/${mcpId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (response.ok) {
+                    showStatus('Updated successfully. Restart PrivateGPT to apply to chat!', 'success', editMcpStatus);
+                    await fetchMCPConfigs();
+                    setTimeout(() => editMcpModal.classList.add('hidden'), 2000);
+                } else {
+                    const res = await response.json();
+                    throw new Error(res.detail || 'Failed to update.');
+                }
+            } catch (error) {
+                showStatus(error.message, 'error', editMcpStatus);
+            }
+        });
+    }
+
+    [editMcpModalCloseBtn, cancelEditMcpBtn].forEach(btn => {
+        if(btn) btn.addEventListener('click', () => editMcpModal.classList.add('hidden'));
+    });
+
+    // --- Run Test Connection ---
+    async function runTestConnection(mcpPayload) {
+        testMcpModal.classList.remove('hidden');
+        testMcpStatus.textContent = 'Testing connection...\nEstablishing session...';
+        testMcpStatus.style.color = 'var(--foreground)';
+
+        try {
+            const response = await fetch('/api/admin/mcp/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(mcpPayload),
+            });
+            const result = await response.json();
+            
+            if (response.ok) {
+                let output = `✅ ${result.message}\n\nDiscovered Tools:\n`;
+                result.tools.forEach(t => {
+                    output += ` - ${t.name}: ${t.description.substring(0, 70)}...\n`;
+                });
+                output += '\n\nNote: If tools are discovered, the AI agent has full access to them (Requires Server Restart if recently edited).';
+                testMcpStatus.textContent = output;
+                testMcpStatus.style.color = 'hsl(145, 55%, 35%)'; // Greenish
+            } else {
+                testMcpStatus.textContent = `❌ Test Failed\n\nError: ${result.error || result.detail}`;
+                testMcpStatus.style.color = 'hsl(0, 72.2%, 50.6%)'; // Redish
+            }
+        } catch (error) {
+            testMcpStatus.textContent = `❌ Test Error\n\nCould not reach backend API: ${error.message}`;
+            testMcpStatus.style.color = 'hsl(0, 72.2%, 50.6%)';
+        }
+    }
+
+    if (testMcpModalCloseBtn) {
+        testMcpModalCloseBtn.addEventListener('click', () => testMcpModal.classList.add('hidden'));
+    }
 
     // --- UI & Theme ---
     function manageTheme() {
@@ -654,14 +964,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Generic list mover for all 4 lists (teams avail/assigned, tags avail/assigned)
     [availableTeamsList, assignedTeamsList, availableTagsList, assignedTagsList].forEach(list => {
         if (list) {
             list.addEventListener('click', e => {
                 if (e.target.classList.contains('team-list-item')) {
-                    // Logic: Find sibling list (Available <-> Assigned)
-                    // This is slightly brittle, assumes container structure: div.team-selector-container > div > ul
-                    // Simplified approach: If ID contains 'available', move to 'assigned' and vice versa.
                     const targetId = list.id.includes('available') ? list.id.replace('available', 'assigned') : list.id.replace('assigned', 'available');
                     const targetList = document.getElementById(targetId);
                     if (targetList) moveTeamItem(e.target, list, targetList);
@@ -676,7 +982,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     savePermissionsBtn.addEventListener('click', handleSavePermissions);
 
-    // Edit User Modal Listeners
     [editUserModalCloseBtn, cancelEditUserBtn].forEach(btn => {
         btn.addEventListener('click', () => {
             editUserModal.classList.add('hidden');
@@ -687,7 +992,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveEditUserBtn.addEventListener('click', handleSaveUserEdit);
     
-    // Reset Password Modal Listeners
     [resetPasswordModalCloseBtn, cancelResetPasswordBtn].forEach(btn => {
         btn.addEventListener('click', () => {
             resetPasswordModal.classList.add('hidden');
@@ -698,7 +1002,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     saveResetPasswordBtn.addEventListener('click', handleResetPassword);
 
-
     // --- Initialization ---
     async function init() {
         if (createUserForm) createUserForm.reset();
@@ -707,7 +1010,7 @@ document.addEventListener('DOMContentLoaded', () => {
         manageTheme();
         await fetchUserInfo();
         await fetchAndStoreTeams();
-        await fetchAndStoreTags(); // [2025-12-03]
+        await fetchAndStoreTags(); 
         await refreshUserList();
         await fetchDocumentsAndPermissions();
     }

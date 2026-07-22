@@ -111,6 +111,21 @@ def init_db():
                 """)
                 logger.info("Table 'system_settings' created.")
 
+            # MCP Configurations Table
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='mcp_configs';")
+            if cursor.fetchone() is None:
+                cursor.execute("""
+                    CREATE TABLE mcp_configs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        transport_type TEXT NOT NULL,
+                        command TEXT NOT NULL,
+                        args TEXT,
+                        env_vars TEXT
+                    );
+                """)
+                logger.info("Table 'mcp_configs' created.")
+
             cursor.execute("COMMIT;")
         except sqlite3.Error as e:
             cursor.execute("ROLLBACK;")
@@ -350,3 +365,47 @@ def save_llm_config(provider: str, url: str, token: str, model: str):
             llm_model=excluded.llm_model;
         """, (provider, url, token, model))
         conn.commit()
+
+# --- MCP Configuration Functions ---
+def create_mcp_config(name: str, transport_type: str, command: str, args: list, env_vars: dict):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        args_json = json.dumps(args)
+        env_vars_json = json.dumps(env_vars)
+        cursor.execute(
+            "INSERT INTO mcp_configs (name, transport_type, command, args, env_vars) VALUES (?, ?, ?, ?, ?)",
+            (name, transport_type, command, args_json, env_vars_json)
+        )
+        conn.commit()
+        logger.info(f"MCP Config '{name}' created.")
+
+def update_mcp_config(mcp_id: int, name: str, transport_type: str, command: str, args: list, env_vars: dict):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        args_json = json.dumps(args)
+        env_vars_json = json.dumps(env_vars)
+        cursor.execute(
+            "UPDATE mcp_configs SET name = ?, transport_type = ?, command = ?, args = ?, env_vars = ? WHERE id = ?",
+            (name, transport_type, command, args_json, env_vars_json, mcp_id)
+        )
+        conn.commit()
+        logger.info(f"MCP Config ID {mcp_id} updated.")
+
+def get_all_mcp_configs():
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        rows = cursor.execute("SELECT * FROM mcp_configs").fetchall()
+        configs = []
+        for row in rows:
+            config = dict(row)
+            config['args'] = json.loads(config['args']) if config['args'] else []
+            config['env_vars'] = json.loads(config['env_vars']) if config['env_vars'] else {}
+            configs.append(config)
+        return configs
+
+def delete_mcp_config(mcp_id: int):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM mcp_configs WHERE id = ?", (mcp_id,))
+        conn.commit()
+        logger.info(f"MCP Config ID {mcp_id} deleted.")
