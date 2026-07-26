@@ -89,8 +89,34 @@
                             <option value="Default" selected>Default (Auto-Detect)</option>
                         </select>
                     </div>
+
+                    <!-- [NEW] Zabbix Health Check Intercept Controls -->
+                    <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+                        <label style="font-weight: 500; font-size: 0.85rem; display: block; margin-bottom: 0.25rem;">Health Check Range</label>
+                        <select id="zabbix-time-range" class="textbox" style="margin-bottom: 0.5rem;">
+                            <option value="1">Last 1 Day</option>
+                            <option value="7">Last 1 Week</option>
+                            <option value="30" selected>Last 1 Month</option>
+                            <option value="custom">Custom Date Range</option>
+                        </select>
+                        
+                        <div id="zabbix-custom-dates" style="display: none; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.75rem; color: var(--foreground-muted);">From</label>
+                                <input type="date" id="zabbix-custom-from" class="textbox" style="padding: 0.4rem;">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.75rem; color: var(--foreground-muted);">To</label>
+                                <input type="date" id="zabbix-custom-to" class="textbox" style="padding: 0.4rem;">
+                            </div>
+                        </div>
+                        
+                        <button id="zabbix-health-btn" class="icon-button" style="width: 100%; background: var(--primary); color: white; justify-content: center; font-weight: 600;">
+                            🔍 Run Zabbix Health Check
+                        </button>
+                    </div>
                     
-                    <div class="mode-selector hidden-by-role">
+                    <div class="mode-selector hidden-by-role" style="margin-top: 0.5rem;">
                         <label style="font-weight: 500; margin-bottom: 0.25rem;">Mode</label>
                         <label><input type="radio" name="mode" value="RAG" checked> RAG Mode</label>
                         <label><input type="radio" name="mode" value="Search"> Search Mode</label>

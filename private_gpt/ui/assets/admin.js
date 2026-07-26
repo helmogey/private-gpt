@@ -10,11 +10,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const userManagementTab = document.getElementById('user-management-tab');
     const docManagementTab = document.getElementById('doc-management-tab');
     const llmConfigTab = document.getElementById('llm-config-tab');
-    const mcpConfigTab = document.getElementById('mcp-config-tab'); // Added
+    const mcpConfigTab = document.getElementById('mcp-config-tab'); 
     const userManagementContent = document.getElementById('user-management-content');
     const docManagementContent = document.getElementById('doc-management-content');
     const llmConfigContent = document.getElementById('llm-config-content');
-    const mcpConfigContent = document.getElementById('mcp-config-content'); // Added
+    const mcpConfigContent = document.getElementById('mcp-config-content');
 
     // User Management elements
     const createUserForm = document.getElementById('create-user-form');
@@ -69,11 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const llmTokenInput = document.getElementById('llm-token');
     const fetchModelsBtn = document.getElementById('fetch-models-btn');
     const llmModelSelect = document.getElementById('llm-model-select');
+    const llmSystemPromptInput = document.getElementById('llm-system-prompt');
     const saveLlmBtn = document.getElementById('save-llm-btn');
     const fetchModelsStatus = document.getElementById('fetch-models-status');
     const saveLlmStatus = document.getElementById('save-llm-status');
 
-    // --- MCP Config Elements (Added) ---
+    // --- MCP Config Elements ---
     const createMcpForm = document.getElementById('create-mcp-form');
     const mcpNameInput = document.getElementById('mcp-name');
     const mcpTransportSelect = document.getElementById('mcp-transport');
@@ -116,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentEditingDoc = null;
     let currentEditingUser = null; 
 
-
     // --- Utility Functions ---
     function showStatus(message, type = 'info', element = createUserStatus) {
         element.textContent = message;
@@ -143,15 +143,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!tab) return;
             tab.addEventListener('click', () => {
                 tabs.forEach(t => t?.classList.remove('active'));
-                panes.forEach(p => p?.classList.remove('active'));
+                
+                // CRITICAL FIX: Clean up rogue inline styles set by earlier scripts
+                panes.forEach(p => {
+                    if (p) {
+                        p.classList.remove('active');
+                        p.style.display = ''; // Clear inline styles so CSS logic runs
+                    }
+                });
                 
                 tab.classList.add('active');
                 if (panes[index]) {
                     panes[index].classList.add('active');
-                    // Special grid handling for panes that need it
-                    if (tab.id === 'user-management-tab' || tab.id === 'mcp-config-tab') {
-                        panes[index].style.display = 'grid';
-                    }
                 }
 
                 if (tab.id === 'llm-config-tab') loadCurrentLLMConfig();
@@ -194,7 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </td>
                 <td>
-                    <div class="team-badges"> <!-- Reuse badge style for tags -->
+                    <div class="team-badges">
                         ${tags.map(tag => `<span class="team-badge tag-badge">${tag}</span>`).join('') || '<span class="empty-badge">No tags</span>'}
                     </div>
                 </td>
@@ -210,14 +213,13 @@ document.addEventListener('DOMContentLoaded', () => {
         currentEditingDoc = docName;
         modalDocName.textContent = docName;
     
-        // Find the document data from the table
         const docRow = Array.from(docList.querySelectorAll('tr')).find(row => row.cells[0].textContent === docName);
         
-        // 1. Teams
+        // Teams
         const assignedTeamBadges = docRow.cells[1].querySelectorAll('.team-badge');
         const assignedTeams = Array.from(assignedTeamBadges).map(badge => badge.textContent);
         
-        // 2. Tags
+        // Tags
         const assignedTagBadges = docRow.cells[2].querySelectorAll('.team-badge');
         const assignedTags = Array.from(assignedTagBadges).map(badge => badge.textContent);
     
@@ -291,7 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
     // --- User Management ---
     async function fetchAndStoreTeams() {
         try {
@@ -301,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             populateTeamsDropdown();
         } catch (error) {
             console.error('Error fetching teams list:', error);
-            allTeams = ['Default']; // Fallback
+            allTeams = ['Default']; 
             populateTeamsDropdown();
         }
     }
@@ -314,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
             allTags = await response.json();
         } catch (error) {
             console.error('Error fetching tags list:', error);
-            allTags = ['GENERAL']; // Fallback
+            allTags = ['GENERAL']; 
         }
     }
 
@@ -595,7 +596,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         provider: llmProviderSelect.value,
                         url: llmUrlInput.value,
                         token: llmTokenInput.value,
-                        model: llmModelSelect.value
+                        model: llmModelSelect.value,
+                        system_prompt: llmSystemPromptInput.value
                     })
                 });
                 const data = await response.json();
@@ -614,6 +616,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) return;
             const data = await response.json();
             
+            // ALWAYS populate the prompt text area if available (even on first launch)
+            if (data && data.system_prompt && llmSystemPromptInput) {
+                llmSystemPromptInput.value = data.system_prompt;
+            }
+
             if (data && data.llm_provider) {
                 llmProviderSelect.value = data.llm_provider;
                 llmProviderSelect.dispatchEvent(new Event('change'));

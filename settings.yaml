@@ -24,9 +24,10 @@ ui:
   path: "/" 
   default_mode: "RAG"
   default_query_system_prompt: >
-    You can only answer questions about the provided context.
-    If you know the answer but it is not based in the provided context, don't provide
-    the answer, just state the answer is not in the context provided.
+    You are an intelligent, helpful AI assistant.
+    If you are provided with document context, use it to accurately answer the user's question.
+    If you have access to external tools (like the Zabbix API), you MUST use them to fetch real-time information to solve the user's request.
+    If the answer is not available in the context and cannot be found using your tools, simply state that you do not have the information. Do not hallucinate or make up data.
   delete_file_button_enabled: true
   delete_all_files_button_enabled: true
 

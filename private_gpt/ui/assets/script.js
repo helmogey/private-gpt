@@ -23,6 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const chatCategorySelect = document.getElementById('chat-category-select');
     
+    // [NEW] Zabbix DOM Elements
+    const zabbixHealthBtn = document.getElementById('zabbix-health-btn');
+    const zabbixTimeRange = document.getElementById('zabbix-time-range');
+    const zabbixCustomDatesContainer = document.getElementById('zabbix-custom-dates');
+
     const tagModal = document.getElementById('tag-modal');
     const tagModalCloseBtn = document.getElementById('tag-modal-close-btn');
     
@@ -196,8 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (chatInput) chatInput.focus();
     }
 
-    async function sendMessage() {
-        const message = chatInput.value.trim();
+    // [MODIFIED] Added zabbix date range parameters
+    async function sendMessage(triggerToolFlag = null, hiddenMessageText = null, zabbixTimeFrom = null, zabbixTimeTill = null) {
+        const message = hiddenMessageText !== null ? hiddenMessageText : chatInput.value.trim();
         if (!message || isTyping) return;
 
         const isNewChat = !currentSessionId;
@@ -211,23 +217,38 @@ document.addEventListener('DOMContentLoaded', () => {
         appendMessage('user', message);
         chatHistory.push({ role: 'user', content: message });
         
-        chatInput.value = '';
-        autoResizeTextarea(chatInput);
+        if (!triggerToolFlag) {
+            chatInput.value = '';
+            autoResizeTextarea(chatInput);
+        }
 
         setButtonLoading(sendBtn, true);
+        if (zabbixHealthBtn) setButtonLoading(zabbixHealthBtn, true);
         showTypingIndicator();
 
         try {
+            const payload = {
+                messages: chatHistory,
+                mode: currentMode,
+                context_filter: selectedFile ? { docs_ids: [selectedFile] } : null,
+                session_id: currentSessionId,
+                category: selectedCategory 
+            };
+
+            if (triggerToolFlag) {
+                payload.trigger_tool = triggerToolFlag;
+            }
+            if (zabbixTimeFrom) {
+                payload.zabbix_time_from = zabbixTimeFrom;
+            }
+            if (zabbixTimeTill) {
+                payload.zabbix_time_till = zabbixTimeTill;
+            }
+
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: chatHistory,
-                    mode: currentMode,
-                    context_filter: selectedFile ? { docs_ids: [selectedFile] } : null,
-                    session_id: currentSessionId,
-                    category: selectedCategory 
-                }),
+                body: JSON.stringify(payload),
             });
              if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
@@ -294,6 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             hideTypingIndicator();
             setButtonLoading(sendBtn, false);
+            if (zabbixHealthBtn) setButtonLoading(zabbixHealthBtn, false);
             resetSessionTimeout();
         }
     }
@@ -311,20 +333,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const fileName = fileRow[0];
                 const li = document.createElement('li');
 
-                // 1. Checkbox for batch deletion
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.className = 'file-checkbox hidden-by-role';
                 checkbox.value = fileName;
                 checkbox.addEventListener('click', (e) => e.stopPropagation()); 
 
-                // 2. File name container
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'file-item-name';
                 nameSpan.textContent = fileName;
                 nameSpan.title = fileName; 
 
-                // 3. Inline single-delete button
                 const delBtn = document.createElement('button');
                 delBtn.className = 'file-item-delete hidden-by-role';
                 delBtn.title = "Delete this file";
@@ -785,12 +804,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- Event Listeners ---
-    if (sendBtn) sendBtn.addEventListener('click', sendMessage);
+    if (sendBtn) sendBtn.addEventListener('click', () => sendMessage());
+    
     if (chatInput) {
         chatInput.addEventListener('input', () => autoResizeTextarea(chatInput));
         chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
     }
     
+    // [NEW] Event Listener for Zabbix Health Intercept Calendar Logic
+    if (zabbixTimeRange && zabbixCustomDatesContainer) {
+        zabbixTimeRange.addEventListener('change', (e) => {
+            if (e.target.value === 'custom') {
+                zabbixCustomDatesContainer.style.display = 'flex';
+            } else {
+                zabbixCustomDatesContainer.style.display = 'none';
+            }
+        });
+    }
+
+    if (zabbixHealthBtn) {
+        zabbixHealthBtn.addEventListener('click', () => {
+            let timeFrom = null;
+            let timeTill = null;
+            let rangeText = "the selected date range";
+
+            if (zabbixTimeRange && zabbixTimeRange.value === 'custom') {
+                const fromInput = document.getElementById('zabbix-custom-from').value;
+                const toInput = document.getElementById('zabbix-custom-to').value;
+                
+                if (fromInput) {
+                    timeFrom = Math.floor(new Date(fromInput).getTime() / 1000);
+                    rangeText = `from ${fromInput}`;
+                }
+                if (toInput) {
+                    // Set to end of the selected day
+                    const toObj = new Date(toInput);
+                    toObj.setHours(23, 59, 59, 999);
+                    timeTill = Math.floor(toObj.getTime() / 1000);
+                    rangeText += ` to ${toInput}`;
+                }
+            } else if (zabbixTimeRange) {
+                const days = parseInt(zabbixTimeRange.value) || 30;
+                timeFrom = Math.floor(Date.now() / 1000) - (days * 86400);
+                rangeText = `the last ${days} days`;
+            }
+            
+            sendMessage("zabbix_health_check", `🔍 Run Zabbix Health Check (${rangeText})`, timeFrom, timeTill);
+        });
+    }
+
     if (uploadInput) {
         uploadInput.addEventListener('change', async e => { 
             if (e.target.files.length > 0) {

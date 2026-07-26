@@ -3,7 +3,7 @@ import os
 import json
 import warnings
 from pathlib import Path
-from typing import List
+from typing import List, Any
 from enum import Enum
 from uuid import uuid4
 from datetime import datetime
@@ -44,9 +44,6 @@ from private_gpt.database import (
     update_mcp_config       
 )
 from private_gpt.di import global_injector
-from private_gpt.server.chat.chat_service import ChatService
-from private_gpt.server.chunks.chunks_service import ChunksService
-from private_gpt.server.ingest.ingest_service import IngestService
 from private_gpt.settings.settings import settings
 
 # This should match the value in launcher.py
@@ -62,11 +59,10 @@ def get_branding_info():
     logo_url = os.getenv("APP_LOGO_URL", "/assets/NEC-Logo.svg")
     return JSONResponse(content={"appName": app_name, "logoUrl": logo_url})
 
-# --- [2025-12-03] New Endpoint to Expose Valid Tags ---
 @api_router.get("/tags")
 def get_tags():
     """
-    [2025-12-03] Returns the list of valid tags/categories from the environment.
+    Returns the list of valid tags/categories from the environment.
     Used by the frontend to populate upload dropdowns and admin filters.
     """
     default_categories = "GENERAL,EMPLOYEE,SERVER,ZABBIX"
@@ -78,18 +74,17 @@ class Modes(str, Enum):
     RAG_MODE = "RAG"
     SEARCH_MODE = "Search"
 
-# --- Dependency Injectors ---
-
-def get_chat_service() -> ChatService:
+def get_chat_service():
+    from private_gpt.server.chat.chat_service import ChatService
     return global_injector.get(ChatService)
 
-def get_chunks_service() -> ChunksService:
+def get_chunks_service():
+    from private_gpt.server.chunks.chunks_service import ChunksService
     return global_injector.get(ChunksService)
 
-def get_ingest_service() -> IngestService:
+def get_ingest_service():
+    from private_gpt.server.ingest.ingest_service import IngestService
     return global_injector.get(IngestService)
-
-# --- Utility and Authentication ---
 
 async def require_admin(request: Request):
     """Dependency to check if the user has an 'admin' role."""
@@ -97,18 +92,11 @@ async def require_admin(request: Request):
         raise HTTPException(status_code=403, detail="Forbidden: Requires admin privileges")
     return True
 
-# --- [2025-12-03] Category Identification Helper ---
-
-def identify_query_category(chat_service: ChatService, user_query: str) -> str:
-    """
-    Classifies the user intent using the LLM into specific categories.
-    Returns one of the categories defined in VALID_QUERY_CATEGORIES env var.
-    """
+def identify_query_category(chat_service: Any, user_query: str) -> str:
+    """Classifies the user intent using the LLM into specific categories."""
     try:
-        # Access the LLM directly from the component within chat_service
         llm = chat_service.llm_component.llm
         
-        # Default prompt if .env variable is missing
         default_prompt = (
             "You are a query router. Classify the user's input into one of the following categories:\n"
             "1. 'GENERAL': General information requests or casual chat.\n"
@@ -119,22 +107,18 @@ def identify_query_category(chat_service: ChatService, user_query: str) -> str:
             "Respond ONLY with the category name (e.g., 'ZABBIX', 'EMPLOYEE')."
         )
         
-        # Load prompt from environment variable, fallback to default
         prompt_template = os.getenv("CATEGORY_CLASSIFICATION_PROMPT", default_prompt)
         prompt_template = prompt_template.replace('\\n', '\n')
         
-        # Inject the user query into the template
         if "{user_query}" in prompt_template:
             classification_prompt = prompt_template.replace("{user_query}", user_query)
         else:
             logger.warning("CATEGORY_CLASSIFICATION_PROMPT missing '{user_query}' placeholder. Appending query to end.")
             classification_prompt = f"{prompt_template}\n\nUser Query: {user_query}"
         
-        # Use a temporary ChatMessage list for this classification call
         response = llm.chat([ChatMessage(role=MessageRole.USER, content=classification_prompt)])
         category = response.message.content.strip().upper()
         
-        # Load valid categories from Env
         default_categories = "GENERAL,EMPLOYEE,SERVER,ZABBIX"
         valid_categories_str = os.getenv("VALID_QUERY_CATEGORIES", default_categories)
         valid_categories = [cat.strip().upper() for cat in valid_categories_str.split(',') if cat.strip()]
@@ -151,15 +135,15 @@ def identify_query_category(chat_service: ChatService, user_query: str) -> str:
         logger.error(f"Error identifying category: {e}")
         return "GENERAL"
 
-# --- Pydantic Models ---
-
 class ChatBody(BaseModel):
     messages: list[dict[str, str]]
     mode: str = "RAG"
     context_filter: dict | None = None
     session_id: str | None = None
-    # [2025-12-14] Add category field for manual selection
     category: str | None = "Default"
+    trigger_tool: str | None = None  # Intercept flag
+    zabbix_time_from: int | None = None
+    zabbix_time_till: int | None = None
 
 class CreateUserBody(BaseModel):
     username: str
@@ -196,6 +180,7 @@ class LLMConfigRequest(BaseModel):
     url: str | None = None
     token: str | None = None
     model: str
+    system_prompt: str | None = None
 
 class MCPConfigBody(BaseModel):
     name: str
@@ -203,8 +188,6 @@ class MCPConfigBody(BaseModel):
     command: str
     args: List[str] = []
     env_vars: dict = {}
-
-# --- UI Session & User Info Endpoints ---
 
 @api_router.get("/session/expiry")
 def get_session_expiry(request: Request):
@@ -247,8 +230,6 @@ async def handle_update_user(request: Request, body: UpdateUserBody):
     
     return JSONResponse(content={"message": "Profile updated successfully."}, status_code=200)
 
-# --- Chat Endpoints ---
-
 @api_router.get("/chats")
 async def get_chats(request: Request):
     user_id = request.session.get("user_id")
@@ -269,11 +250,11 @@ async def get_history_by_session(session_id: str, request: Request):
 async def chat(
     request: Request, 
     chat_body: ChatBody,
-    chat_service: ChatService = Depends(get_chat_service),
-    chunks_service: ChunksService = Depends(get_chunks_service),
-    ingest_service: IngestService = Depends(get_ingest_service)
+    chat_service: Any = Depends(get_chat_service), 
+    chunks_service: Any = Depends(get_chunks_service),
+    ingest_service: Any = Depends(get_ingest_service)
 ):
-    from private_gpt.launcher import mcp_manager # Fetch global MCP manager
+    from private_gpt.launcher import mcp_manager 
     
     user_id = request.session.get("user_id")
     user_role = request.session.get("user_role")
@@ -284,41 +265,10 @@ async def chat(
 
     user_selected_category = chat_body.category
     
-    # Define categories that have MCP tools attached
-    tool_categories = ["ZABBIX"]
-    
     if user_selected_category and user_selected_category.upper() != "DEFAULT":
         query_category = user_selected_category.upper()
-        logger.info(f"Incoming Query: '{last_message.content}' | Manual Category: {query_category}")
     else:
         query_category = identify_query_category(chat_service, last_message.content)
-        logger.info(f"Incoming Query: '{last_message.content}' | Identified Category (Auto): {query_category}")
-
-    # --- NEW: Retrieve and filter active MCP Tools for this category ---
-    active_mcp_tools = []
-    all_mcp_tools = mcp_manager.get_all_tools()
-    
-    system_prompt_override = None
-
-    if query_category == "ZABBIX":
-        # Broaden the filter to capture initMAX tools like host_get, problem_get, etc., 
-        # regardless of what the MCP connection is named in the DB.
-        active_mcp_tools = [
-            tool for tool in all_mcp_tools 
-            if any(keyword in tool.metadata.name.lower() or keyword in tool.metadata.description.lower() 
-                   for keyword in ["zabbix", "host", "problem", "trigger", "event"])
-        ]
-        
-        if active_mcp_tools:
-            system_prompt_override = (
-                "You are an expert Zabbix administrator monitoring infrastructure.\n"
-                "CRITICAL INSTRUCTIONS:\n"
-                "1. You have access to specific Zabbix tools (e.g., host_get, problem_get, trigger_get).\n"
-                "2. YOU MUST USE these tools to fetch live data to answer the user's question.\n"
-                "3. Do not guess, use RAG, or make up data. Always call the relevant tool first.\n"
-                "4. If a tool returns an error, stop and report the error to the user."
-            )
-    # -------------------------------------------------------------------
 
     session_id = chat_body.session_id
     is_new_chat = not session_id
@@ -332,108 +282,236 @@ async def chat(
         "today", "yesterday", "tomorrow", "week", "month", "year", "now",
         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
     ]
-    
     if any(keyword in last_message.content.lower() for keyword in time_keywords):
         current_date_str = datetime.now().strftime("%A, %B %d, %Y")
-        prompt_with_date = (
-            f"Assuming today's date is {current_date_str}, "
-            f"please answer the following user query:\n\n{last_message.content}"
-        )
         if messages:
-            messages[-1].content = prompt_with_date
+            messages[-1].content = f"Assuming today's date is {current_date_str}, please answer the following user query:\n\n{last_message.content}"
 
-    # Handle Search Mode for Admins
-    if user_role == 'admin' and chat_body.mode == Modes.SEARCH_MODE:
-        context_filter = None
-        if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
-             context_filter = ContextFilter(docs_ids=chat_body.context_filter.get("docs_ids"))
-
-        n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
-        relevant_chunks = chunks_service.retrieve_relevant(
-            text=last_message.content, 
-            limit=n_chunks, 
-            prev_next_chunks=0,
-            context_filter=context_filter
-        )
-        
-        sources_data = [
-            {
-                "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
-                "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
-                "text": chunk.text,
-            }
-            for chunk in relevant_chunks
-        ]
-        
-        search_response_text = "\n\n---\n\n".join(
-            f"**Source:** {source['file']} (Page {source['page']})\n\n{source['text']}"
-            for source in sources_data
-        ) or "No relevant documents found for your search."
-        
-        if user_id:
-            save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
-
-        async def search_stream_generator():
-            if is_new_chat:
-                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-            yield f"data: {json.dumps({'delta': search_response_text})}\n\n"
-            if sources_data:
-                yield f"data: {json.dumps({'sources': sources_data})}\n\n"
-
-        return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
-
+    all_mcp_tools = mcp_manager.get_all_tools()
+    llm_config = get_llm_config()
+    system_prompt_override = llm_config.get("system_prompt") if llm_config else None
+    
+    active_mcp_tools = []
     final_context_filter = None
+    use_rag_context = True 
+    is_health_check_bypass = (chat_body.trigger_tool == "zabbix_health_check")
 
-    if user_role != 'admin':
-        all_docs = ingest_service.list_ingested()
-        allowed_docs = [doc for doc in all_docs if any(team in get_document_teams(doc.doc_id) for team in user_teams)]
-
-        tagged_doc_ids = get_docs_by_tag(query_category)
-        allowed_docs = [doc for doc in allowed_docs if doc.doc_id in tagged_doc_ids]
-        allowed_doc_ids = [doc.doc_id for doc in allowed_docs]
-
-        if not allowed_doc_ids and not active_mcp_tools:
-            msg = f"No documents or tools found for category '{query_category}' that you have access to."
-            async def empty_stream():
-                yield f"data: {json.dumps({'delta': msg})}\n\n"
+    # =====================================================================
+    # DIRECT ZABBIX TOOL INTERCEPTOR
+    # =====================================================================
+    if is_health_check_bypass:
+        logger.info("Executing Zabbix Health Check Intercept...")
+        problem_tool = next((t for t in all_mcp_tools if "problem" in t.metadata.name.lower()), None)
+        
+        if not problem_tool:
+            msg = "❌ Error: Zabbix 'problem' tool not found. Ensure MCP server is configured and connected."
+            async def empty_stream(): yield f"data: {json.dumps({'delta': msg})}\n\n"
             return StreamingResponse(empty_stream(), media_type="text/event-stream")
             
-        if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
-            requested_doc_id = chat_body.context_filter["docs_ids"][0]
-            if requested_doc_id in allowed_doc_ids:
-                final_context_filter = ContextFilter(docs_ids=[requested_doc_id])
-            else:
-                async def denied_stream():
-                    yield f"data: {json.dumps({'delta': 'Access denied to the selected document.'})}\n\n"
-                return StreamingResponse(denied_stream(), media_type="text/event-stream")
-        else:
-            final_context_filter = ContextFilter(docs_ids=allowed_doc_ids) if allowed_doc_ids else None
-    
-    elif chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
-        docs = ingest_service.list_ingested()
-        selected_filename = chat_body.context_filter.get("docs_ids")[0]
-        doc_ids_for_file = [doc.doc_id for doc in docs if doc.doc_metadata and doc.doc_metadata.get("file_name") == selected_filename]
-        
-        if doc_ids_for_file:
-            final_context_filter = ContextFilter(docs_ids=doc_ids_for_file)
-        else:
-            final_context_filter = None
+        try:
+            # 1. Prepare dynamic parameters for Zabbix
+            call_kwargs = {}
+            params_dict = {}
             
-    elif user_role == 'admin' and final_context_filter is None:
-         tagged_doc_ids = get_docs_by_tag(query_category)
-         if tagged_doc_ids:
-             final_context_filter = ContextFilter(docs_ids=tagged_doc_ids)
-         elif not active_mcp_tools:
-             msg = f"No documents or tools found for category '{query_category}'."
-             async def empty_stream_admin():
-                yield f"data: {json.dumps({'delta': msg})}\n\n"
-             return StreamingResponse(empty_stream_admin(), media_type="text/event-stream")
+            # Use provided timestamps, or fallback to 30 days ago if missing
+            time_from_ts = chat_body.zabbix_time_from
+            if not time_from_ts:
+                time_from_ts = int(datetime.now().timestamp()) - (30 * 86400)
+            
+            params_dict["time_from"] = time_from_ts
+            if chat_body.zabbix_time_till:
+                params_dict["time_till"] = chat_body.zabbix_time_till
 
+            if hasattr(problem_tool.metadata, 'fn_schema') and problem_tool.metadata.fn_schema:
+                props = problem_tool.metadata.fn_schema.schema().get("properties", {})
+                if "time_from" in props:
+                    call_kwargs["time_from"] = time_from_ts
+                if "time_till" in props and chat_body.zabbix_time_till:
+                    call_kwargs["time_till"] = chat_body.zabbix_time_till
+                elif "params" in props:
+                    call_kwargs["params"] = params_dict
+            
+            # Fire the tool natively
+            if hasattr(problem_tool, 'acall'):
+                tool_output = await problem_tool.acall(**call_kwargs)
+            else:
+                tool_output = problem_tool(**call_kwargs)
+            
+            raw_data = str(tool_output.content) if hasattr(tool_output, 'content') else str(tool_output)
+            
+            # 2. Evaluate if data is empty in Python to prevent LLM contradictions and empty brackets
+            is_empty = False
+            import re
+            compact_data = re.sub(r'\s+', '', raw_data)
+            if compact_data in ['[]', '{}', '""', "''", "None", "null", '{"result":[]}']:
+                is_empty = True
+            else:
+                try:
+                    parsed = json.loads(raw_data)
+                    if isinstance(parsed, list) and len(parsed) == 0:
+                        is_empty = True
+                    elif isinstance(parsed, dict) and not parsed.get("result", True): # If result is empty list
+                        is_empty = True
+                except:
+                    pass
+            
+            if is_empty:
+                msg = "✅ **No active problems detected in the selected time range! System is healthy.**"
+                if user_id:
+                    save_chat_message(user_id, session_id, 'assistant', msg, False)
+                    
+                async def direct_stream():
+                    if is_new_chat:
+                        yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+                    yield f"data: {json.dumps({'delta': msg})}\n\n"
+                    
+                return StreamingResponse(direct_stream(), media_type="text/event-stream")
+
+            # 3. If not empty, overwrite prompt so LLM formats it nicely
+            messages = [ChatMessage(
+                role=MessageRole.USER, 
+                content=(
+                    "You are a strict JSON-to-Markdown translator. You will receive a raw JSON payload containing server alerts.\n"
+                    "Your ONLY job is to extract the issues present in this exact JSON and format them as a readable list.\n\n"
+                    "ABSOLUTE RULES:\n"
+                    "1. DO NOT invent, guess, or hallucinate any servers, timestamps, or problems. Only use what is in the JSON.\n"
+                    "2. DO NOT create empty categories. If a severity category has no issues in the JSON, DO NOT list it.\n"
+                    "3. DO NOT include any conversational text like 'Here is the report', 'Please note', or 'The raw data contains...'.\n\n"
+                    f"=== RAW JSON START ===\n{raw_data}\n=== RAW JSON END ===\n\n"
+                    "Translate the above JSON into a markdown list now. Remember rule #1: DO NOT INVENT DATA."
+                )
+            )]
+            system_prompt_override = "You are a data formatting bot. You only output exactly what you are told to format, with no conversational filler."
+            active_mcp_tools = []
+            final_context_filter = None 
+            use_rag_context = False 
+            query_category = "ZABBIX"
+            
+        except Exception as e:
+            msg = f"❌ Error executing Zabbix tool natively: {str(e)}"
+            async def empty_stream(): yield f"data: {json.dumps({'delta': msg})}\n\n"
+            return StreamingResponse(empty_stream(), media_type="text/event-stream")
+
+    # =====================================================================
+    # STANDARD RAG & MCP LOGIC
+    # =====================================================================
+    else:
+        if query_category == "ZABBIX":
+            active_mcp_tools = [
+                tool for tool in all_mcp_tools 
+                if any(keyword in tool.metadata.name.lower() or keyword in tool.metadata.description.lower() 
+                       for keyword in ["zabbix", "host", "problem", "trigger", "event"])
+            ]
+            
+            if active_mcp_tools:
+                tool_names = ", ".join([f"'{t.metadata.name}'" for t in active_mcp_tools])
+                zabbix_prompt = (
+                    "\n\n=========================================\n"
+                    "CRITICAL SYSTEM INSTRUCTION - TOOL USAGE MANDATORY:\n"
+                    f"You have been granted access to live external tools: {tool_names}.\n"
+                    "You MUST use these tools to fetch real-time data to answer the user's question.\n"
+                    "DO NOT apologize. DO NOT say you lack access. DO NOT provide Python scripts or UI instructions.\n"
+                    "Your ONLY valid response strategy is to call the relevant tool to get the data, and then summarize it.\n"
+                    "=========================================\n"
+                )
+                if system_prompt_override:
+                    system_prompt_override = f"{system_prompt_override}\n\n{zabbix_prompt}"
+                else:
+                    system_prompt_override = zabbix_prompt
+
+        # Handle Search Mode for Admins
+        if user_role == 'admin' and chat_body.mode == Modes.SEARCH_MODE:
+            context_filter = None
+            if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
+                 context_filter = ContextFilter(docs_ids=chat_body.context_filter.get("docs_ids"))
+
+            n_chunks = settings().rag.rerank.top_n if settings().rag.rerank.enabled else settings().rag.similarity_top_k
+            relevant_chunks = chunks_service.retrieve_relevant(
+                text=last_message.content, 
+                limit=n_chunks, 
+                prev_next_chunks=0,
+                context_filter=context_filter
+            )
+            
+            sources_data = [
+                {
+                    "file": chunk.document.doc_metadata.get("file_name", "-") if chunk.document.doc_metadata else "-",
+                    "page": chunk.document.doc_metadata.get("page_label", "-") if chunk.document.doc_metadata else "-",
+                    "text": chunk.text,
+                }
+                for chunk in relevant_chunks
+            ]
+            
+            search_response_text = "\n\n---\n\n".join(
+                f"**Source:** {source['file']} (Page {source['page']})\n\n{source['text']}"
+                for source in sources_data
+            ) or "No relevant documents found for your search."
+            
+            if user_id:
+                save_chat_message(user_id, session_id, 'assistant', search_response_text, False)
+
+            async def search_stream_generator():
+                if is_new_chat:
+                    yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+                yield f"data: {json.dumps({'delta': search_response_text})}\n\n"
+                if sources_data:
+                    yield f"data: {json.dumps({'sources': sources_data})}\n\n"
+
+            return StreamingResponse(search_stream_generator(), media_type="text/event-stream")
+
+        # RAG Permissions Setup
+        if user_role != 'admin':
+            all_docs = ingest_service.list_ingested()
+            allowed_docs = [doc for doc in all_docs if any(team in get_document_teams(doc.doc_id) for team in user_teams)]
+
+            tagged_doc_ids = get_docs_by_tag(query_category)
+            allowed_docs = [doc for doc in allowed_docs if doc.doc_id in tagged_doc_ids]
+            allowed_doc_ids = [doc.doc_id for doc in allowed_docs]
+
+            if not allowed_doc_ids and not active_mcp_tools:
+                msg = f"No documents or tools found for category '{query_category}' that you have access to."
+                async def empty_stream():
+                    yield f"data: {json.dumps({'delta': msg})}\n\n"
+                return StreamingResponse(empty_stream(), media_type="text/event-stream")
+                
+            if chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
+                requested_doc_id = chat_body.context_filter["docs_ids"][0]
+                if requested_doc_id in allowed_doc_ids:
+                    final_context_filter = ContextFilter(docs_ids=[requested_doc_id])
+                else:
+                    async def denied_stream():
+                        yield f"data: {json.dumps({'delta': 'Access denied to the selected document.'})}\n\n"
+                    return StreamingResponse(denied_stream(), media_type="text/event-stream")
+            else:
+                final_context_filter = ContextFilter(docs_ids=allowed_doc_ids) if allowed_doc_ids else None
+        
+        elif chat_body.context_filter and chat_body.context_filter.get("docs_ids"):
+            docs = ingest_service.list_ingested()
+            selected_filename = chat_body.context_filter.get("docs_ids")[0]
+            doc_ids_for_file = [doc.doc_id for doc in docs if doc.doc_metadata and doc.doc_metadata.get("file_name") == selected_filename]
+            
+            if doc_ids_for_file:
+                final_context_filter = ContextFilter(docs_ids=doc_ids_for_file)
+            else:
+                final_context_filter = None
+                
+        elif user_role == 'admin' and final_context_filter is None:
+             tagged_doc_ids = get_docs_by_tag(query_category)
+             if tagged_doc_ids:
+                 final_context_filter = ContextFilter(docs_ids=tagged_doc_ids)
+             elif not active_mcp_tools:
+                 msg = f"No documents or tools found for category '{query_category}'."
+                 async def empty_stream_admin():
+                    yield f"data: {json.dumps({'delta': msg})}\n\n"
+                 return StreamingResponse(empty_stream_admin(), media_type="text/event-stream")
+
+    # =====================================================================
+    # EXECUTION
+    # =====================================================================
     try:
-        # UPDATED TO AWAIT THE ASYNC NATIVE METHOD
         completion_gen = await chat_service.astream_chat(
             messages=messages,
-            use_context=True,
+            use_context=use_rag_context, 
             context_filter=final_context_filter,
             tools=active_mcp_tools,
             system_prompt_override=system_prompt_override
@@ -444,7 +522,6 @@ async def chat(
             if is_new_chat:
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
             
-            # Use async for directly over the newly formatted stream
             async for delta in completion_gen.async_response_gen():
                 text_delta = delta if isinstance(delta, str) else getattr(delta, "delta", str(delta))
                 full_response += text_delta
@@ -488,7 +565,7 @@ async def upload_files(
     files: List[UploadFile] = File(...), 
     teams: str = Form(...),
     tags: str = Form(default="[]"), 
-    ingest_service: IngestService = Depends(get_ingest_service)
+    ingest_service: Any = Depends(get_ingest_service)
 ):
     temp_paths = []
     ingested_docs_info = []
@@ -530,7 +607,7 @@ async def upload_files(
     return JSONResponse(content={"message": f"{len(files)} file(s) uploaded successfully"}, status_code=200)
 
 @api_router.get("/files")
-def list_ingested_files(request: Request, ingest_service: IngestService = Depends(get_ingest_service)):
+def list_ingested_files(request: Request, ingest_service: Any = Depends(get_ingest_service)):
     user_role = request.session.get("user_role")
     user_teams = request.session.get("user_teams", [])
     
@@ -551,7 +628,7 @@ def list_ingested_files(request: Request, ingest_service: IngestService = Depend
 
 
 @api_router.delete("/files/{file_name}", dependencies=[Depends(require_admin)])
-def delete_selected_file(file_name: str, ingest_service: IngestService = Depends(get_ingest_service)):
+def delete_selected_file(file_name: str, ingest_service: Any = Depends(get_ingest_service)):
     decoded_file_name = unquote(file_name)
     
     all_docs = ingest_service.list_ingested()
@@ -570,13 +647,12 @@ def delete_selected_file(file_name: str, ingest_service: IngestService = Depends
 
 
 @api_router.delete("/files", dependencies=[Depends(require_admin)])
-def delete_all_files(ingest_service: IngestService = Depends(get_ingest_service)):
+def delete_all_files(ingest_service: Any = Depends(get_ingest_service)):
     ingested_files = ingest_service.list_ingested()
     for doc in ingested_files:
         ingest_service.delete(doc.doc_id)
     return {"message": "All files deleted successfully"}
 
-# --- Admin Endpoints ---
 
 @api_router.get("/admin/teams")
 async def get_teams_list():
@@ -586,7 +662,7 @@ async def get_teams_list():
     return JSONResponse(content=teams_list)
 
 @api_router.get("/admin/documents", dependencies=[Depends(require_admin)])
-async def get_all_documents_with_permissions(ingest_service: IngestService = Depends(get_ingest_service)):
+async def get_all_documents_with_permissions(ingest_service: Any = Depends(get_ingest_service)):
     all_docs = ingest_service.list_ingested()
     docs_by_filename = {}
     for doc in all_docs:
@@ -603,7 +679,7 @@ async def get_all_documents_with_permissions(ingest_service: IngestService = Dep
 @api_router.post("/admin/documents/permissions", dependencies=[Depends(require_admin)])
 async def update_document_permissions(
     body: DocumentPermissionBody,
-    ingest_service: IngestService = Depends(get_ingest_service)
+    ingest_service: Any = Depends(get_ingest_service)
 ):
     all_docs = ingest_service.list_ingested()
     doc_ids_to_update = [
@@ -701,26 +777,38 @@ async def handle_reset_password(body: AdminResetPasswordBody, request: Request):
         logger.error(f"Error resetting password for user '{body.username}': {e}")
         raise HTTPException(status_code=500, detail="Internal server error while resetting password.")
 
-@api_router.delete("/admin/users/{username}", dependencies=[Depends(require_admin)])
-async def handle_delete_user(username: str, request: Request):
-    """Deletes a user. Admin only."""
-    logged_in_user = request.session.get("username")
-    if username == logged_in_user:
-        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
-
-    try:
-        delete_user(username)
-        return JSONResponse(content={"message": f"User '{username}' deleted successfully."}, status_code=200)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error deleting user '{username}': {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while deleting user.")
-
 @api_router.get("/admin/llm/config", dependencies=[Depends(require_admin)])
 async def fetch_current_llm_config():
     config = get_llm_config()
-    return JSONResponse(content=config or {})
+    
+    if not config:
+        config = {}
+
+    if not config.get("system_prompt"):
+        try:
+            import yaml 
+            settings_path = Path("settings.yaml")
+            if settings_path.exists():
+                with open(settings_path, "r") as f:
+                    yaml_data = yaml.safe_load(f)
+                    
+                    yaml_prompt = None
+                    if "ui" in yaml_data and "default_chat_system_prompt" in yaml_data["ui"]:
+                        yaml_prompt = yaml_data["ui"]["default_chat_system_prompt"]
+                    elif "llm" in yaml_data and "system_prompt" in yaml_data["llm"]:
+                        yaml_prompt = yaml_data["llm"]["system_prompt"]
+                        
+                    if yaml_prompt:
+                        config["system_prompt"] = yaml_prompt
+                    else:
+                        config["system_prompt"] = "You are a helpful AI assistant."
+            else:
+                config["system_prompt"] = "You are a helpful AI assistant."
+        except Exception as e:
+            logger.warning(f"Could not load fallback prompt from settings.yaml: {e}")
+            config["system_prompt"] = "You are a helpful AI assistant."
+            
+    return JSONResponse(content=config)
 
 @api_router.post("/admin/llm/models", dependencies=[Depends(require_admin)])
 async def fetch_llm_models(body: LLMModelsRequest):
@@ -749,10 +837,8 @@ async def fetch_llm_models(body: LLMModelsRequest):
 
 @api_router.post("/admin/llm/config", dependencies=[Depends(require_admin)])
 async def save_llm_cfg(body: LLMConfigRequest):
-    save_llm_config(body.provider, body.url, body.token, body.model)
+    save_llm_config(body.provider, body.url, body.token, body.model, body.system_prompt)
     return JSONResponse(content={"message": "LLM Configuration saved! Please restart PrivateGPT to apply changes globally."})
-
-# --- MCP Admin Endpoints ---
 
 @api_router.get("/admin/mcp", dependencies=[Depends(require_admin)])
 async def fetch_mcp_configs():
@@ -800,7 +886,6 @@ async def handle_test_mcp(body: MCPConfigBody):
     import asyncio
 
     try:
-        # 10 SECOND TIMEOUT
         async with asyncio.timeout(10.0):
             async with AsyncExitStack() as stack:
                 if body.transport_type == "stdio":

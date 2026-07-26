@@ -143,14 +143,20 @@
                         </select>
                     </div>
 
+                    <div class="form-group">
+                        <label for="llm-system-prompt">System Prompt</label>
+                        <p class="form-hint">Set the global context and instructions for the AI.</p>
+                        <textarea id="llm-system-prompt" class="textbox" rows="4" placeholder="You are a helpful AI assistant..."></textarea>
+                    </div>
+
                     <button type="button" id="save-llm-btn" class="icon-button form-submit-btn" disabled>Save Configuration</button>
                     <div id="save-llm-status" class="upload-status" style="display: none;"></div>
                 </form>
             </div>
         </div>
 
-        <!-- MCP Config Content -->
-        <div id="mcp-config-content" class="tab-pane" style="grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start;">
+        <!-- MCP Config Content (Inline inline styles removed, moved to CSS to prevent bugs) -->
+        <div id="mcp-config-content" class="tab-pane">
             <div class="admin-card">
                 <h3>Add MCP Integration</h3>
                 <p class="form-hint">Register a new Model Context Protocol server (e.g., Zabbix).</p>

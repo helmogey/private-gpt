@@ -106,10 +106,17 @@ def init_db():
                         llm_provider TEXT,
                         llm_url TEXT,
                         llm_token TEXT,
-                        llm_model TEXT
+                        llm_model TEXT,
+                        system_prompt TEXT
                     );
                 """)
                 logger.info("Table 'system_settings' created.")
+            else:
+                cursor.execute("PRAGMA table_info(system_settings)")
+                columns = [column['name'] for column in cursor.fetchall()]
+                if 'system_prompt' not in columns:
+                    cursor.execute("ALTER TABLE system_settings ADD COLUMN system_prompt TEXT;")
+                    logger.info("Column 'system_prompt' added to 'system_settings' table.")
 
             # MCP Configurations Table
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='mcp_configs';")
@@ -352,18 +359,19 @@ def get_llm_config():
         row = cursor.execute("SELECT * FROM system_settings WHERE id = 1").fetchone()
         return dict(row) if row else None
 
-def save_llm_config(provider: str, url: str, token: str, model: str):
+def save_llm_config(provider: str, url: str, token: str, model: str, system_prompt: str = None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO system_settings (id, llm_provider, llm_url, llm_token, llm_model)
-            VALUES (1, ?, ?, ?, ?)
+            INSERT INTO system_settings (id, llm_provider, llm_url, llm_token, llm_model, system_prompt)
+            VALUES (1, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
             llm_provider=excluded.llm_provider,
             llm_url=excluded.llm_url,
             llm_token=excluded.llm_token,
-            llm_model=excluded.llm_model;
-        """, (provider, url, token, model))
+            llm_model=excluded.llm_model,
+            system_prompt=excluded.system_prompt;
+        """, (provider, url, token, model, system_prompt))
         conn.commit()
 
 # --- MCP Configuration Functions ---

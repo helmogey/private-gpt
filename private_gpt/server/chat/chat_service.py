@@ -149,6 +149,7 @@ class ChatService:
                     metadata=ToolMetadata(name="rag_search", description="Search internal documentation. Use this first for general knowledge!")
                 )
                 
+                # Import ReActAgent from the correct v0.11+ workflow path
                 from llama_index.core.agent.workflow import ReActAgent
                 
                 agent = ReActAgent(
@@ -192,13 +193,25 @@ class ChatService:
         msg_content = input_data.last_message.content if input_data.last_message else ""
         
         if isinstance(engine, AsyncWorkflowAgentWrapper):
+            # Agent pathway (MCP Tools active) - natively async, tools execute perfectly here
             return await engine.astream_chat(msg_content, chat_history=input_data.chat_history)
         else:
-            # Fallback to standard native engine async streaming
-            response = await engine.astream_chat(msg_content, chat_history=input_data.chat_history)
+            # Fallback for standard RAG (No tools active)
+            # Use the synchronous engine to avoid Qdrant AsyncClient errors, but wrap it in an async generator for FastAPI
+            # Run the synchronous call in a thread pool to avoid blocking the event loop
+            response = await asyncio.to_thread(
+                engine.stream_chat, msg_content, chat_history=input_data.chat_history
+            )
             source_nodes = getattr(response, "source_nodes", [])
             sources = [Chunk.from_node(node) for node in source_nodes]
-            return AsyncCompletionGen(response.async_response_gen(), sources)
+            
+            async def sync_to_async_gen():
+                # Yield from the synchronous generator, sleeping briefly to yield control to the event loop
+                for chunk in response.response_gen:
+                    yield chunk
+                    await asyncio.sleep(0.001)
+
+            return AsyncCompletionGen(sync_to_async_gen(), sources)
 
     # Legacy Sync Pathways (Keep these alive for backwards compatibility)
     def stream_chat(self, messages: list[ChatMessage], use_context: bool = False, context_filter: ContextFilter | None = None, tools: list[Any] | None = None, system_prompt_override: str | None = None) -> CompletionGen:
